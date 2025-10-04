@@ -72,7 +72,7 @@ app.get("/test/detect", (req, res) => {
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>🕸️ Spidey-Sense — Object Detection Test</title>
+  <title>🕸️ Spidey-Sense — Auto Speak Detect</title>
   <style>
     body { font-family: system-ui; margin: 0; padding: 20px; }
     h1 { margin-bottom: 12px; }
@@ -81,22 +81,23 @@ app.get("/test/detect", (req, res) => {
     #video { width: 640px; height: 480px; object-fit: cover; }
     #overlay { position:absolute; left:0; top:0; width:640px; height:480px; pointer-events:none; }
     #log { white-space: pre-wrap; background:#f6f6f6; padding:10px; border-radius:8px; min-height:100px; }
-    button { padding: 10px 14px; border-radius: 8px; border: 1px solid #ccc; cursor: pointer; margin-right: 6px; }
+    button, label { padding: 8px 10px; border-radius: 8px; border: 1px solid #ccc; cursor: pointer; margin-right: 8px; }
     .pill { display:inline-block; padding:4px 8px; border-radius:999px; background:#eee; margin:2px; }
+    .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
   </style>
 </head>
 <body>
-  <h1>🕸️ Spidey-Sense — Camera Object Detection</h1>
+  <h1>🕸️ Spidey-Sense — Auto Speak on Detect</h1>
   <div class="row">
     <div id="videoWrap">
       <video id="video" autoplay playsinline muted></video>
       <canvas id="overlay" width="640" height="480"></canvas>
     </div>
     <div style="flex:1; max-width:520px">
-      <div style="margin-bottom:10px">
+      <div class="controls">
         <button id="startCam">🎥 Start Camera</button>
         <button id="toggleDetect" disabled>🕸️ Start Detect</button>
-        <button id="speak" disabled>🔊 Speak</button>
+        <label><input type="checkbox" id="autoSpeak" checked> Auto Speak</label>
       </div>
       <div><strong>Objects:</strong> <span id="objects"><em>none</em></span></div>
       <div style="margin-top:10px"><strong>Gemini:</strong> <div id="gemini">(waiting…)</div></div>
@@ -116,17 +117,21 @@ app.get("/test/detect", (req, res) => {
     const ctx = overlay.getContext('2d');
     const startCamBtn = document.getElementById('startCam');
     const toggleDetectBtn = document.getElementById('toggleDetect');
-    const speakBtn = document.getElementById('speak');
     const objectsEl = document.getElementById('objects');
     const geminiEl = document.getElementById('gemini');
     const logEl = document.getElementById('log');
     const audioEl = document.getElementById('audio');
+    const autoSpeakChk = document.getElementById('autoSpeak');
 
     let model = null;
     let running = false;
     let lastPostAt = 0;
     let lastObjects = [];
     let lastSentKey = "";
+    let lastSpokenKey = "";
+    let speaking = false;
+    let lastSpeakAt = 0;
+    const SPEAK_COOLDOWN_MS = 2000; // prevent rapid-fire
 
     function log(msg) {
       logEl.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg + '\\n' + logEl.textContent;
@@ -142,13 +147,43 @@ app.get("/test/detect", (req, res) => {
         ctx.strokeStyle = 'red';
         ctx.strokeRect(x, y, w, h);
         ctx.fillStyle = 'rgba(255,0,0,0.6)';
-        ctx.fillRect(x, y - 18, ctx.measureText(p.class).width + 10, 18);
+        const label = p.class + ' ' + Math.round(p.score*100) + '%';
+        ctx.fillRect(x, Math.max(0,y - 18), ctx.measureText(label).width + 10, 18);
         ctx.fillStyle = '#fff';
-        ctx.fillText(p.class, x + 5, y - 5);
+        ctx.fillText(label, x + 5, Math.max(12,y - 5));
       });
     }
 
     function keyFor(names){ return names.slice().sort().join('|'); }
+
+    async function speakText(text, keyForObjects) {
+      // prevent overlaps + cooldown + don't repeat same set
+      const now = performance.now();
+      if (speaking) { log('Skip speak: already speaking'); return; }
+      if (now - lastSpeakAt < SPEAK_COOLDOWN_MS) { log('Skip speak: cooldown'); return; }
+      if (keyForObjects && keyForObjects === lastSpokenKey) { log('Skip speak: same objects'); return; }
+
+      try {
+        speaking = true;
+        lastSpeakAt = now;
+        lastSpokenKey = keyForObjects || '';
+        log('TTS → /api/speak: ' + text);
+        const resp = await fetch('/api/speak', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ text })
+        });
+        if (!resp.ok) { log('Speak failed: ' + resp.status); return; }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        audioEl.src = url;
+        await audioEl.play().catch(e => log('Autoplay blocked: ' + e.message));
+      } catch(e) {
+        log('Speak error: ' + e.message);
+      } finally {
+        speaking = false;
+      }
+    }
 
     async function detectLoop() {
       if (!running) return;
@@ -162,28 +197,43 @@ app.get("/test/detect", (req, res) => {
       const k = keyFor(names);
       const now = performance.now();
 
-      if (names.length && k !== lastSentKey && (now - lastPostAt) > 1500) {
+      // Only call backend if objects changed and throttled
+      if (names.length && k !== lastSentKey && (now - lastPostAt) > 1200) {
         lastPostAt = now;
         lastSentKey = k;
         try {
-          log('Sending to /api/detect → ' + JSON.stringify(names));
+          log('POST /api/detect → ' + JSON.stringify(names));
           const resp = await fetch('/api/detect', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ objects: names })
           });
-          const text = await resp.text();
+          const raw = await resp.text();
+          let phrase = '';
           try {
-            const data = JSON.parse(text);
-            geminiEl.textContent = data.message || '(no message)';
-            log('Gemini: ' + geminiEl.textContent);
-          } catch(e) {
-            geminiEl.textContent = '(parse error)';
-            log('Gemini parse error: ' + text);
+            const data = JSON.parse(raw);
+            phrase = (data && data.message) ? data.message : '';
+          } catch {
+            log('Parse error from /api/detect: ' + raw);
+          }
+
+          if (!phrase) {
+            phrase = 'Detected: ' + names.join(', ');
+          }
+          geminiEl.textContent = phrase;
+          log('Gemini → ' + phrase);
+
+          // Auto speak when enabled
+          if (autoSpeakChk.checked) {
+            await speakText(phrase, k);
           }
         } catch(e) {
-          geminiEl.textContent = '(request failed)';
-          log('Gemini fetch error: ' + e.message);
+          log('Detect error: ' + e.message);
+          const fallback = 'Detected: ' + names.join(', ');
+          geminiEl.textContent = fallback;
+          if (autoSpeakChk.checked) {
+            await speakText(fallback, k);
+          }
         }
       }
 
@@ -212,34 +262,14 @@ app.get("/test/detect", (req, res) => {
     toggleDetectBtn.onclick = () => {
       running = !running;
       toggleDetectBtn.textContent = running ? '⏸️ Stop Detect' : '🕸️ Start Detect';
-      speakBtn.disabled = !running;
       if (running) detectLoop();
-    };
-
-    speakBtn.onclick = async () => {
-      try {
-        const text = geminiEl.textContent || (lastObjects.length ? ('Detected: ' + lastObjects.join(', ')) : 'No objects detected.');
-        log('Sending to /api/speak → ' + text);
-        const resp = await fetch('/api/speak', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ text })
-        });
-        if (!resp.ok) { log('speak failed: ' + resp.status); return; }
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
-        audioEl.src = url;
-        audioEl.play();
-        log('Playing ElevenLabs audio');
-      } catch(e) {
-        log('Speak error: ' + e.message);
-      }
     };
   </script>
 </body>
 </html>
   `);
 });
+
 
 
 app.listen(PORT, () =>
