@@ -3,19 +3,19 @@ import { getContextFromGemini } from "../controllers/geminiController.js";
 
 const router = express.Router();
 
+// POST /api/detect
+// Body: { objects: string[], layout?: { left: string[], center: string[], right: string[] } }
 router.post("/", async (req, res) => {
   try {
-    const { objects } = req.body || {};
-    if (!Array.isArray(objects) || objects.length === 0) {
-      return res.status(400).json({ error: "objects[] required" });
-    }
-    console.log("🔎 /api/detect objects:", objects);
-    const message = await getContextFromGemini(objects);
+    const { objects = [], layout = null } = req.body || {};
+    const message = await getContextFromGemini(objects, layout);
     res.json({ message });
   } catch (e) {
-    console.error("❌ /api/detect error:", e?.response?.data || e.message);
-    // Fallback so the UI still shows something:
-    res.json({ message: `Detected: ${ (req.body?.objects||[]).join(", ") }` });
+    console.error("❌ /api/detect:", e?.response?.data || e.message);
+    const fallback = (req.body?.objects?.length
+      ? `Detected: ${req.body.objects.join(", ")}`
+      : "Clear path ahead.");
+    res.json({ message: fallback });
   }
 });
 

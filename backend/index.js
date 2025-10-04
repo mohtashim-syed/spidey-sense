@@ -72,7 +72,7 @@ app.get("/test/detect", (req, res) => {
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>🕸️ Spidey-Sense — Auto Speak Detect</title>
+  <title>🕸️ Spidey-Sense — Brief Detect & Auto Speak</title>
   <style>
     body { font-family: system-ui; margin: 0; padding: 20px; }
     h1 { margin-bottom: 12px; }
@@ -81,20 +81,19 @@ app.get("/test/detect", (req, res) => {
     #video { width: 640px; height: 480px; object-fit: cover; }
     #overlay { position:absolute; left:0; top:0; width:640px; height:480px; pointer-events:none; }
     #log { white-space: pre-wrap; background:#f6f6f6; padding:10px; border-radius:8px; min-height:100px; }
-    button, label { padding: 8px 10px; border-radius: 8px; border: 1px solid #ccc; cursor: pointer; margin-right: 8px; }
     .pill { display:inline-block; padding:4px 8px; border-radius:999px; background:#eee; margin:2px; }
-    .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+    button, label { padding:8px 10px; border-radius:8px; border:1px solid #ccc; cursor:pointer; margin-right:8px; }
   </style>
 </head>
 <body>
-  <h1>🕸️ Spidey-Sense — Auto Speak on Detect</h1>
+  <h1>🕸️ Spidey-Sense — Auto Speak with Brief Gemini Descriptions</h1>
   <div class="row">
     <div id="videoWrap">
       <video id="video" autoplay playsinline muted></video>
       <canvas id="overlay" width="640" height="480"></canvas>
     </div>
     <div style="flex:1; max-width:520px">
-      <div class="controls">
+      <div style="margin-bottom:10px">
         <button id="startCam">🎥 Start Camera</button>
         <button id="toggleDetect" disabled>🕸️ Start Detect</button>
         <label><input type="checkbox" id="autoSpeak" checked> Auto Speak</label>
@@ -131,10 +130,16 @@ app.get("/test/detect", (req, res) => {
     let lastSpokenKey = "";
     let speaking = false;
     let lastSpeakAt = 0;
-    const SPEAK_COOLDOWN_MS = 2000; // prevent rapid-fire
+    const SPEAK_COOLDOWN_MS = 2000;
 
     function log(msg) {
       logEl.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg + '\\n' + logEl.textContent;
+    }
+
+    function bucketSide(xCenter, width=640) {
+      if (xCenter < width/3) return 'left';
+      if (xCenter > 2*width/3) return 'right';
+      return 'center';
     }
 
     function drawBoxes(preds) {
@@ -146,8 +151,8 @@ app.get("/test/detect", (req, res) => {
         const [x, y, w, h] = p.bbox;
         ctx.strokeStyle = 'red';
         ctx.strokeRect(x, y, w, h);
-        ctx.fillStyle = 'rgba(255,0,0,0.6)';
         const label = p.class + ' ' + Math.round(p.score*100) + '%';
+        ctx.fillStyle = 'rgba(255,0,0,0.6)';
         ctx.fillRect(x, Math.max(0,y - 18), ctx.measureText(label).width + 10, 18);
         ctx.fillStyle = '#fff';
         ctx.fillText(label, x + 5, Math.max(12,y - 5));
@@ -157,17 +162,13 @@ app.get("/test/detect", (req, res) => {
     function keyFor(names){ return names.slice().sort().join('|'); }
 
     async function speakText(text, keyForObjects) {
-      // prevent overlaps + cooldown + don't repeat same set
       const now = performance.now();
-      if (speaking) { log('Skip speak: already speaking'); return; }
-      if (now - lastSpeakAt < SPEAK_COOLDOWN_MS) { log('Skip speak: cooldown'); return; }
-      if (keyForObjects && keyForObjects === lastSpokenKey) { log('Skip speak: same objects'); return; }
-
+      if (speaking || (now - lastSpeakAt < SPEAK_COOLDOWN_MS) || keyForObjects === lastSpokenKey) return;
       try {
         speaking = true;
         lastSpeakAt = now;
-        lastSpokenKey = keyForObjects || '';
-        log('TTS → /api/speak: ' + text);
+        lastSpokenKey = keyForObjects;
+        log('TTS → ' + text);
         const resp = await fetch('/api/speak', {
           method: 'POST',
           headers: {'Content-Type':'application/json'},
@@ -178,8 +179,6 @@ app.get("/test/detect", (req, res) => {
         const url = URL.createObjectURL(blob);
         audioEl.src = url;
         await audioEl.play().catch(e => log('Autoplay blocked: ' + e.message));
-      } catch(e) {
-        log('Speak error: ' + e.message);
       } finally {
         speaking = false;
       }
@@ -190,15 +189,22 @@ app.get("/test/detect", (req, res) => {
       const preds = await model.detect(video);
       drawBoxes(preds);
 
-      const names = [...new Set(preds.filter(p => p.score > 0.3).map(p => p.class))];
+      const strong = preds.filter(p => p.score > 0.3);
+      const names = [...new Set(strong.map(p => p.class))];
+      const layout = { left:[], center:[], right:[] };
+      strong.forEach(p => {
+        const [x, y, w, h] = p.bbox;
+        const side = bucketSide(x + w/2, overlay.width);
+        if (!layout[side].includes(p.class)) layout[side].push(p.class);
+      });
+
       lastObjects = names;
       objectsEl.innerHTML = names.map(n => '<span class="pill">'+n+'</span>').join(' ') || '<em>none</em>';
 
       const k = keyFor(names);
       const now = performance.now();
 
-      // Only call backend if objects changed and throttled
-      if (names.length && k !== lastSentKey && (now - lastPostAt) > 1200) {
+      if ((names.length && k !== lastSentKey && (now - lastPostAt) > 1200) || (!names.length && (now - lastPostAt) > 3000)) {
         lastPostAt = now;
         lastSentKey = k;
         try {
@@ -206,34 +212,22 @@ app.get("/test/detect", (req, res) => {
           const resp = await fetch('/api/detect', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ objects: names })
+            body: JSON.stringify({ objects: names, layout })
           });
           const raw = await resp.text();
           let phrase = '';
           try {
             const data = JSON.parse(raw);
             phrase = (data && data.message) ? data.message : '';
-          } catch {
-            log('Parse error from /api/detect: ' + raw);
-          }
+          } catch { phrase = ''; }
 
-          if (!phrase) {
-            phrase = 'Detected: ' + names.join(', ');
-          }
+          if (!phrase) phrase = names.length ? 'Detected: ' + names.join(', ') : 'Clear path ahead.';
           geminiEl.textContent = phrase;
           log('Gemini → ' + phrase);
 
-          // Auto speak when enabled
-          if (autoSpeakChk.checked) {
-            await speakText(phrase, k);
-          }
+          if (autoSpeakChk.checked) await speakText(phrase, k);
         } catch(e) {
           log('Detect error: ' + e.message);
-          const fallback = 'Detected: ' + names.join(', ');
-          geminiEl.textContent = fallback;
-          if (autoSpeakChk.checked) {
-            await speakText(fallback, k);
-          }
         }
       }
 
@@ -269,7 +263,6 @@ app.get("/test/detect", (req, res) => {
 </html>
   `);
 });
-
 
 
 app.listen(PORT, () =>
