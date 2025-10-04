@@ -1,25 +1,27 @@
 import express from "express";
 import cors from "cors";
-import morgan from "morgan";
 import dotenv from "dotenv";
 
+// Route imports
+import detectRoutes from "./routes/detect.js";
+import speakRoutes from "./routes/speak.js";
+import profileRoutes from "./routes/profile.js";
+
 dotenv.config();
-
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 5000;
 
+// Middlewares
 app.use(cors());
-app.use(express.json());
-app.use(morgan("dev"));
+app.use(express.json({ limit: "10mb" }));
 
-app.get("/health", (req, res) => {
-  res.json({ ok: true, service: "spidey-sense-backend", time: new Date().toISOString() });
-});
+// Routes
+app.use("/api/detect", detectRoutes);
+app.use("/api/speak", speakRoutes);
+app.use("/api/profile", profileRoutes);
 
-app.get('/', (req, res) => {
-  res.type('text/plain').send('Spidey-Sense backend is running. Try GET /health.');
-});
+app.get("/", (req, res) => res.send("🕸️ Spidey-Sense Backend is running!"));
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+app.listen(PORT, () =>
+  console.log(`🚀 Server live on http://localhost:${PORT}`)
+);
