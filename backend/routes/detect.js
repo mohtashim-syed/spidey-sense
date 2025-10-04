@@ -3,15 +3,19 @@ import { getContextFromGemini } from "../controllers/geminiController.js";
 
 const router = express.Router();
 
-// POST /api/detect
 router.post("/", async (req, res) => {
   try {
-    const { objects = [], hint = "", mode = "Explore" } = req.body;
-    const context = await getContextFromGemini(objects, hint, mode);
-    res.json({ message: context });
-  } catch (err) {
-    console.error("Detect route error:", err.message);
-    res.status(500).json({ error: "Gemini detection failed" });
+    const { objects } = req.body || {};
+    if (!Array.isArray(objects) || objects.length === 0) {
+      return res.status(400).json({ error: "objects[] required" });
+    }
+    console.log("🔎 /api/detect objects:", objects);
+    const message = await getContextFromGemini(objects);
+    res.json({ message });
+  } catch (e) {
+    console.error("❌ /api/detect error:", e?.response?.data || e.message);
+    // Fallback so the UI still shows something:
+    res.json({ message: `Detected: ${ (req.body?.objects||[]).join(", ") }` });
   }
 });
 
