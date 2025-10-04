@@ -6,7 +6,28 @@ export const getContextFromGemini = async (objects) => {
     return `Detected: ${objects.join(", ")}`;
   }
 
-  const prompt = `You are Spidey-Sense. In one short sentence, describe these objects to a visually impaired user with helpful spatial hints if typical: ${objects.join(", ")}.`;
+  const prompt = const prompt = `
+You are "Spidey-Sense", an AI vision narrator for visually-impaired users.
+
+Your mission: describe the user's immediate surroundings in one or two short sentences,
+focusing on spatial awareness and navigation safety.
+
+Input:
+- Scene: ${hint || "unknown"}
+- Detected objects: ${JSON.stringify(objects, null, 2)}
+- Mode: ${mode}
+
+Instructions:
+1. Clearly describe nearby objects and obstacles.
+2. Mention their relative positions (front, left, right, behind).
+3. Warn about walls or obstacles that block the path ("wall ahead", "door on right - closed").
+4. If an open path exists, mention it ("path clear ahead").
+5. Keep it calm, kind, and clear — no unnecessary words.
+6. In Calm mode, be gentle and minimal.
+7. Respond as a human guide would — helpful and descriptive.
+
+Output: 1 sentences, maximum 5 words.
+`;
 
   const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
   const headers = { "x-goog-api-key": process.env.GEMINI_API_KEY };
