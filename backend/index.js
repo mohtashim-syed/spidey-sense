@@ -38,6 +38,33 @@ app.get("/", (req, res) => {
   `);
 });
 
+app.get("/test/speak", (req, res) => {
+  res.type("html").send(`
+<!doctype html>
+<html><body style="font-family:system-ui;padding:24px">
+  <h1>🔊 ElevenLabs Test</h1>
+  <input id="text" style="width:420px" value="Spidey Sense activated. Door ahead.">
+  <button id="go">Speak</button>
+  <audio id="audio" controls></audio>
+<script>
+document.getElementById('go').onclick = async () => {
+  const text = document.getElementById('text').value;
+  const resp = await fetch('/api/speak', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ text })
+  });
+  if (!resp.ok) return alert('TTS failed');
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const audio = document.getElementById('audio');
+  audio.src = url;
+  audio.play();
+};
+</script>
+</body></html>
+  `);
+});
 
 app.listen(PORT, () =>
   console.log(`🚀 Server live on http://localhost:${PORT}`)
