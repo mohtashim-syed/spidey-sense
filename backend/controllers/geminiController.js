@@ -6,7 +6,7 @@ export const getContextFromGemini = async (objects) => {
     return `Detected: ${objects.join(", ")}`;
   }
 
-  const prompt = const prompt = `
+  const prompt = `
 You are "Spidey-Sense", an AI vision narrator for visually-impaired users.
 
 Your mission: describe the user's immediate surroundings in one or two short sentences,
