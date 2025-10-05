@@ -2,7 +2,8 @@
 **Navigate the world, fearlessly.**<br>
 
 AI-powered navigation assistant that helps visually impaired users explore their surroundings through real-time detection, spatial awareness, and conversational guidance.
-Watch Here: (https://youtu.be/SmBhXeC8LCg?si=urIZ8hoMH9UmX-Rm)
+Watch Here: (https://youtu.be/SmBhXeC8LCg?si=urIZ8hoMH9UmX-Rm)<br>
+
 ---
 ## 🌎 Social Impact
 More than **285 million** people worldwide live with visual impairments. Traditional canes and GPS apps offer **limited awareness** — they can’t describe nearby obstacles or open paths.<br>
