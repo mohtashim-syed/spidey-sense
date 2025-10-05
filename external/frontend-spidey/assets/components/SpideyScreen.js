@@ -32,42 +32,6 @@ export function SpideyScreen({ navigation }) {
     }
   };
 
-  function button(text, onPress) {
-    return (
-      <View
-        style={{
-          borderRadius: 50,
-          borderWidth: 4,
-          borderColor: '#000',
-          margin: '2.5%',
-        }}
-      >
-        <TouchableOpacity
-          onPress={onPress}
-          style={{
-            borderRadius: 40,
-            borderWidth: 8,
-            borderColor: '#FFF',
-            paddingVertical: 10,
-            backgroundColor: 'rgba(0,0,0,0.4)',
-          }}
-        >
-          <Text
-            style={{
-              fontFamily: 'Baloo',
-              fontSize: 40,
-              textAlign: 'center',
-              color: '#FFF',
-              paddingHorizontal: '10%',
-            }}
-          >
-            {text}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   if (!bgLoaded) {
     return (
       <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
@@ -77,25 +41,56 @@ export function SpideyScreen({ navigation }) {
     );
   }
 
-  const titleStyle = {
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  };
-
   return (
     <ImageBackground source={bgImage} style={{ flex: 1 }} resizeMode="cover">
-      <SafeAreaView style={[styles.container, { alignItems: 'center' }]}>
-        <View style={{ marginTop: 27 }} />
-        <ShadowTitle text="SELECT" style={titleStyle} />
-        <View style={{ marginVertical: -13 }} />
-        <ShadowTitle text="YOUR" style={titleStyle} />
-        {button('EXPLORE', requestPermissions)}
-        {button('FOCUS', requestPermissions)}
-        {button('CALM', requestPermissions)}
-        <ShadowTitle text="SPIDEY-" style={titleStyle} />
-        <View style={{ marginVertical: -13 }} />
-        <ShadowTitle text="SENSE" style={titleStyle} />
+      <SafeAreaView
+        style={[
+          styles.container,
+          { alignItems: 'center', justifyContent: 'space-between', paddingVertical: 100 },
+        ]}
+      >
+        <View style={{ alignItems: 'center' }}>
+          <ShadowTitle text="SELECT" />
+          <View style={{ marginVertical: -8 }} />
+          <ShadowTitle text="YOUR" />
+        </View>
+
+        <TouchableOpacity
+          onPress={requestPermissions}
+          style={{
+            borderRadius: 50,
+            borderWidth: 4,
+            borderColor: '#000',
+          }}
+        >
+          <View
+            style={{
+              borderRadius: 40,
+              borderWidth: 8,
+              borderColor: '#FFF',
+              paddingVertical: 10,
+              paddingHorizontal: 40,
+              backgroundColor: 'rgba(0,0,0,0.4)',
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: 'Baloo',
+                fontSize: 40,
+                textAlign: 'center',
+                color: '#FFF',
+              }}
+            >
+              EXPLORE
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        <View style={{ alignItems: 'center'}}>
+          <ShadowTitle text="SPIDEY-" />
+          <View style={{ marginVertical: -4 }} />
+          <ShadowTitle text="SENSE" />
+        </View>
       </SafeAreaView>
     </ImageBackground>
   );

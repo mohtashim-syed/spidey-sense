@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Image, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 const AVATARS = [
@@ -9,13 +9,31 @@ const AVATARS = [
   require('./profilepic/peterbpark.jpeg'),
 ];
 
+const leaderboard = [
+  { name: 'Gwen',  steps: 10400, weight: 175, height: 62 },
+  { name: 'Miles', steps: 13200, weight: 138, height: 64 },
+  { name: 'Punk',  steps: 13400, weight: 195, height: 65 },
+  { name: 'Peter', steps: 14400, weight: 190, height: 67 },
+  { name: 'Nina',  steps:  9100, weight: 140, height: 66 },
+  { name: 'Leo',   steps: 12600, weight: 180, height: 70 },
+  { name: 'Ava',   steps: 11300, weight: 172, height: 72 },
+  { name: 'Riley', steps: 14300, weight: 140, height: 73 },
+];
+
 export default function Setting() {
-  const [selected, setSelected] = React.useState(0);
-  const [savedIndex, setSavedIndex] = React.useState(0);
+  const [selected, setSelected] = useState(0);
+  const [savedIndex, setSavedIndex] = useState(0);
+  const [friendsOpen, setFriendsOpen] = useState(false);
+  const [showChart, setShowChart] = useState(false);
 
   const goLeft = () => setSelected(prev => (prev === 0 ? AVATARS.length - 1 : prev - 1));
   const goRight = () => setSelected(prev => (prev === AVATARS.length - 1 ? 0 : prev + 1));
-  const confirmAvatar = () => { setSavedIndex(selected); Alert.alert('Avatar Updated', 'Your profile picture has been saved.'); };
+
+  const confirmAvatar = () => {
+    setSavedIndex(selected);
+    alert('Avatar Updated\nYour profile picture has been saved.');
+  };
+
   const isSaved = selected === savedIndex;
 
   return (
@@ -31,13 +49,13 @@ export default function Setting() {
       <Text
         style={{
           color: '#000',
-          fontSize: 24,
+          fontSize: 35,
           fontWeight: '600',
           marginBottom: 30,
           fontFamily: 'Baloo',
           textShadowColor: '#A20021',
-          textShadowRadius: 10,
-          textShadowOffset: { width: 0, height: 6 },
+          textShadowRadius: 8,
+          textShadowOffset: { width: 0, height: 1 },
         }}
       >
         SETTING MODE
@@ -99,12 +117,108 @@ export default function Setting() {
           borderWidth: 2,
           borderColor: '#000',
           width: '80%',
-          marginBottom: 58,
-          marginTop: 33,
+          marginBottom: 30,
         }}
       >
         <Text style={{ color: '#000', fontWeight: '700' }}>PROFILE INFO</Text>
       </TouchableOpacity>
+
+      <TouchableOpacity
+        onPress={() => setFriendsOpen(!friendsOpen)}
+        style={{
+          backgroundColor: '#f2f2f2',
+          borderRadius: 12,
+          paddingVertical: 14,
+          alignItems: 'center',
+          borderWidth: 2,
+          borderColor: '#000',
+          width: '80%',
+          marginBottom: friendsOpen ? 16 : 30,
+        }}
+      >
+        <Text style={{ color: '#000', fontWeight: '700' }}>
+          FRIENDS {friendsOpen ? '▲' : '▼'}
+        </Text>
+      </TouchableOpacity>
+
+      {friendsOpen && (
+        <View
+          style={{
+            width: '80%',
+            backgroundColor: '#fff',
+            borderRadius: 12,
+            borderWidth: 2,
+            borderColor: '#000',
+            padding: 14,
+            marginBottom: 24,
+            gap: 10,
+          }}
+        >
+          <Text style={{ color: '#000', fontWeight: '700', marginBottom: 8 }}>
+            Leaderboard
+          </Text>
+
+          {leaderboard.map((p, i) => {
+            const isLast = i === leaderboard.length - 1;
+            return (
+              <View key={p.name + i} style={{ marginBottom: 10 }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    borderWidth: 2,
+                    borderColor: '#000',
+                    borderRadius: 10,
+                  }}
+                >
+                  <Text style={{ color: '#000', fontWeight: '700', width: 32, textAlign: 'center' }}>{i + 1}</Text>
+                  <Text style={{ color: '#000', flex: 1, marginLeft: 8 }}>{p.name}</Text>
+                  <Text style={{ color: '#333', marginRight: 14 }}>{p.weight} lb · {p.height} in</Text>
+                  <Text style={{ color: '#000', fontWeight: '800' }}>{p.steps.toLocaleString()} steps</Text>
+                </View>
+
+                {isLast && (
+                  <TouchableOpacity
+                    onPress={() => setShowChart(!showChart)}
+                    style={{
+                      alignSelf: 'flex-start',
+                      marginTop: 6,
+                      paddingVertical: 8,
+                      paddingHorizontal: 12,
+                      borderRadius: 8,
+                      borderWidth: 2,
+                      borderColor: '#000',
+                      backgroundColor: '#f2f2f2',
+                    }}
+                  >
+                    <Text style={{ color: '#000', fontWeight: '700' }}>
+                      {showChart ? 'Hide graph' : 'See more'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            );
+          })}
+
+          {showChart && (
+            <Image
+              source={require('./profilepic/Chart-pic1/output.png')}
+              style={{
+                width: '100%',
+                height: 220,
+                borderRadius: 10,
+                borderWidth: 2,
+                borderColor: '#000',
+                marginTop: 10,
+              }}
+              resizeMode="contain"
+            />
+          )}
+        </View>
+      )}
 
       <TouchableOpacity
         style={{
