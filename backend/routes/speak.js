@@ -1,19 +1,24 @@
-// Handles elevenLabs TTS
-import express from "express";
-import { getSpeechFromElevenLabs } from "../controllers/elevenLabsController.js";
+// routes/speak.js
+import { Router } from "express";
+import { synthesizeSpeech } from "../services/eleven.js";
 
-const router = express.Router();
+const router = Router();
 
-// POST /api/speak
-router.post("/", async (req, res) => {
+router.post("/", async (req, res, next) => {
   try {
-    const { text } = req.body;
-    const audioBuffer = await getSpeechFromElevenLabs(text);
-    res.set("Content-Type", "audio/mpeg");
-    res.send(audioBuffer);
+    const { text, voiceId } = req.body;
+    if (!text || typeof text !== "string") {
+      return res.status(400).json({ error: true, message: "Missing 'text' string" });
+    }
+
+    const { buffer, contentType } = await synthesizeSpeech(text, voiceId);
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Length", buffer.length);
+    res.status(200).send(buffer);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Text-to-Speech failed" });
+    console.error("TTS error:", err?.message);
+    next(err);
   }
 });
 
