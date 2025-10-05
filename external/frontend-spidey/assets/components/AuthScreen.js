@@ -5,9 +5,46 @@ import * as AuthSession from 'expo-auth-session';
 import { useAutoDiscovery, useAuthRequest, exchangeCodeAsync } from 'expo-auth-session';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
+import { ShadowTitle } from './ShadowTitle';
 
 const auth0Domain = `https://${Constants.expoConfig?.extra?.auth0Domain}`;
 const clientId = Constants.expoConfig?.extra?.auth0ClientId;
+
+
+  function button(text, onPress) {
+    return (
+      <View
+        style={{
+          borderRadius: 50,
+          borderWidth: 4,
+          margin: '2.5%',
+        }}
+      >
+        <TouchableOpacity
+          onPress={onPress}
+          style={{
+            borderRadius: 40,
+            borderWidth: 8,
+            borderColor: '#FFF',
+            paddingVertical: 10,
+            backgroundColor: 'rgba(0,0,0,0.4)',
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: 'Baloo',
+              fontSize: 40,
+              textAlign: 'center',
+              color: '#FFF',
+              paddingHorizontal: '10%',
+            }}
+          >
+            {text}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
 // NOTE: In production, useProxy will not work.
 const useProxy = true;
@@ -40,17 +77,11 @@ export default function AuthScreen({ setIsAuthed }) {
     try {
       const res = await promptAsync(
         { useProxy, preferEphemeralSession: Platform.OS === 'ios' },
-        { // AuthRequestPromptOptions second arg is deprecated; we can pass extraParams in first arg now:
+        { 
         }
       );
-      // Tip: to force a provider (Google/GitHub), pass extraParams with prompt
-      // Newer expo-auth-session supports extraParams in prompt:
-      // const res = await promptAsync({ useProxy, extraParams: { connection } });
 
       if (res.type === 'success') {
-        // If your Auth0 Universal Login has ONLY Google & GitHub enabled
-        // you don’t need to pass connection. If you want to force it per-button:
-        // re-run promptAsync with `extraParams: { connection }` (see note above).
 
         const { code } = res.params;
         const tokenRes = await exchangeCodeAsync(
@@ -63,7 +94,6 @@ export default function AuthScreen({ setIsAuthed }) {
           discovery
         );
 
-        // Save tokens securely (optional: also save id_token)
         await SecureStore.setItemAsync('access_token', tokenRes.accessToken || tokenRes.access_token);
         if (tokenRes.idToken || tokenRes.id_token) {
           await SecureStore.setItemAsync('id_token', tokenRes.idToken || tokenRes.id_token);
@@ -88,15 +118,9 @@ export default function AuthScreen({ setIsAuthed }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: 'black', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
-      <Text style={{ color: 'white', fontSize: 28, marginBottom: 24 }}>Welcome</Text>
-
-      <TouchableOpacity
-        disabled={!request || busy}
-        onPress={() => doLogin('google-oauth2')}
-        style={{ backgroundColor: 'white', borderRadius: 10, paddingHorizontal: 24, paddingVertical: 12, marginBottom: 12, width: '90%', alignItems: 'center' }}
-      >
-        <Text style={{ fontSize: 18 }}>Continue with Google</Text>
-      </TouchableOpacity>
+      <ShadowTitle text={"WELCOME"} />
+      <View style={{marginVertical: 10}}/>
+      {button("Continue with Google", () => doLogin('google-0auth2')) }
 
       {busy ? <ActivityIndicator color="#fff" style={{ marginTop: 20 }} /> : null}
     </View>

@@ -4,12 +4,6 @@ import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
 
-/**
- * Props:
- * - onLoggedOut?: () => void         // e.g. () => setIsAuthed(false)
- * - label?: string                   // button text (default: "Log out")
- * - useProxy?: boolean               // true for dev, false for production
- */
 export default function LogoutButton({ onLoggedOut, label = 'Log out', useProxy = true }) 
 {
   const [busy, setBusy] = React.useState(false);
@@ -17,9 +11,6 @@ export default function LogoutButton({ onLoggedOut, label = 'Log out', useProxy 
   const auth0Domain = `https://${Constants.expoConfig?.extra?.auth0Domain}`;
   const clientId = Constants.expoConfig?.extra?.auth0ClientId;
 
-  // returnTo MUST be whitelisted in Auth0 "Allowed Logout URLs"
-  // Dev:  https://auth.expo.dev
-  // Prod: spideyapp://logout   (make sure "scheme": "spideyapp" in app.json)
   const returnTo = useProxy ? 'https://auth.expo.dev' : 'spideyapp://logout';
 
   const logoutUrl =
@@ -31,7 +22,7 @@ export default function LogoutButton({ onLoggedOut, label = 'Log out', useProxy 
     console.log('clientId:', clientId);             // exact Client ID from Auth0 app
     console.log('returnTo:', returnTo);             // see below
     console.log('logoutUrl:', logoutUrl);           // full URL you open in WebBrowser
-    
+
     const handleLogout = async () => {
     if (busy) return;
     setBusy(true);
