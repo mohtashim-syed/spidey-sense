@@ -5,10 +5,19 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
-import { HomeScreen } from './assets/components/HomeScreen';
-import { SpideyScreen } from './assets/components/SpideyScreen';
-import Setting from './assets/components/Setting';
-import WebExplore from './assets/components/WebExplore';
+const DISABLE_LAZY = process.env.EXPO_PUBLIC_DISABLE_LAZY === '1';
+const HomeComp = DISABLE_LAZY
+  ? require('./assets/components/HomeScreen').HomeScreen
+  : React.lazy(() => import('./assets/components/HomeScreen').then(m => ({ default: m.HomeScreen })));
+const SpideyComp = DISABLE_LAZY
+  ? require('./assets/components/SpideyScreen').SpideyScreen
+  : React.lazy(() => import('./assets/components/SpideyScreen').then(m => ({ default: m.SpideyScreen })));
+const SettingComp = DISABLE_LAZY
+  ? require('./assets/components/Setting').default
+  : React.lazy(() => import('./assets/components/Setting').then(m => ({ default: m.default })));
+const WebExploreComp = DISABLE_LAZY
+  ? require('./assets/components/WebExplore').default
+  : React.lazy(() => import('./assets/components/WebExplore'));
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -58,8 +67,20 @@ function BottomTabs() {
         tabBarStyle: { backgroundColor: '#FFF', borderTopColor: '#111' },
       })}
     >
-      <Tab.Screen name="Spidey" component={SpideyScreen} />
-      <Tab.Screen name="Settings" component={Setting} />
+      <Tab.Screen name="Spidey">
+        {(props) => (
+          <React.Suspense fallback={<View style={{ flex:1, backgroundColor:'#000', alignItems:'center', justifyContent:'center' }}><ActivityIndicator color="#fff" /></View>}>
+            <SpideyComp {...props} />
+          </React.Suspense>
+        )}
+      </Tab.Screen>
+      <Tab.Screen name="Settings">
+        {(props) => (
+          <React.Suspense fallback={<View style={{ flex:1, backgroundColor:'#000', alignItems:'center', justifyContent:'center' }}><ActivityIndicator color="#fff" /></View>}>
+            <SettingComp {...props} />
+          </React.Suspense>
+        )}
+      </Tab.Screen>
     </Tab.Navigator>
   );
 }
@@ -91,10 +112,33 @@ export default function App() {
         }}
       >
         {/* Splash / Welcome */}
-        <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="Home">
+          {(props) => (
+            <React.Suspense fallback={<View style={{ flex:1, backgroundColor:'#000', alignItems:'center', justifyContent:'center' }}><ActivityIndicator color="#fff" /></View>}>
+              <HomeComp {...props} />
+            </React.Suspense>
+          )}
+        </Stack.Screen>
         
-  <Stack.Screen name="Spidey" component={SpideyScreen} />
-  <Stack.Screen name="WebExplore" component={WebExplore} />
+        <Stack.Screen name="Spidey">
+          {(props) => (
+            <React.Suspense fallback={<View style={{ flex:1, backgroundColor:'#000', alignItems:'center', justifyContent:'center' }}><ActivityIndicator color="#fff" /></View>}>
+              <SpideyComp {...props} />
+            </React.Suspense>
+          )}
+        </Stack.Screen>
+        <Stack.Screen name="WebExplore">
+          {(props) => (
+            <React.Suspense fallback={
+              <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+                <ActivityIndicator color="#fff" />
+                <Text style={{ color: '#fff', marginTop: 8 }}>Loading Explore…</Text>
+              </View>
+            }>
+              <WebExploreComp {...props} />
+            </React.Suspense>
+          )}
+        </Stack.Screen>
 
         {/* Optional page after splash */}
         <Stack.Screen name="Select" component={SelectScreen} />

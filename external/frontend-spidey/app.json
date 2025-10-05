@@ -6,14 +6,20 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+  "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.spidey.sense",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera within the embedded web experience to help guide navigation.",
+        "NSMicrophoneUsageDescription": "This app plays audio guidance and may capture audio for voice features.",
+        "NSAllowsArbitraryLoads": true
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -27,6 +33,10 @@
     },
     "plugins": [
       "expo-font"
-    ]
+    ],
+    "scheme": "spideysense",
+    "experiments": {
+      "tsconfigPaths": true
+    }
   }
 }

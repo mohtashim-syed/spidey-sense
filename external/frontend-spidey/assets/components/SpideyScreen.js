@@ -1,11 +1,24 @@
 import * as React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ShadowTitle } from './ShadowTitle';
 import { styles } from '../styles';
 
 export function SpideyScreen({navigation}) {
-  const openExplore = () => navigation.navigate('WebExplore');
+  const openExplore = () => {
+    const base = process.env.EXPO_PUBLIC_API_BASE;
+    if (!base) {
+      Alert.alert(
+        'Backend URL missing',
+        'Set EXPO_PUBLIC_API_BASE to your https tunnel origin before starting Expo, e.g.:\n\nEXPO_PUBLIC_API_BASE="https://<your-ngrok>.ngrok-free.dev" npx expo start -c --tunnel'
+      );
+      return;
+    }
+    // Prefer navigating on the parent stack from inside tabs
+    const parent = navigation.getParent?.();
+    if (parent?.navigate) parent.navigate('WebExplore');
+    else navigation.navigate('WebExplore');
+  };
 
   function button(text, onPress) {
     return (
