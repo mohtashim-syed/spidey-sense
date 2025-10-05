@@ -12,6 +12,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+
     "ios": {
       "supportsTablet": true
     },
@@ -27,6 +28,12 @@
     },
     "plugins": [
       "expo-font"
-    ]
+    ],
+    "scheme": "spideyapp",
+    "extra": {
+      "auth0Domain": "dev-1kdsyw368wmhxtdp.us.auth0.com",
+      "auth0ClientId": "D6xd5J4mRRQ3i0ATetjQnGIiQNMTAY6c"
+    }
   }
+
 }

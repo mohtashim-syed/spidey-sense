@@ -2,6 +2,7 @@
 import React from 'react';
 import { View, Text, Image, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import LogoutButton from './LogoutButton';
 
 const AVATARS = [
   require('./profilepic/gwen.jpeg'),
@@ -10,7 +11,9 @@ const AVATARS = [
   require('./profilepic/peterbpark.jpeg'),
 ];
 
-export default function Setting() {
+export default function Setting({setIsAuthed}) {
+console.log('Setting got setIsAuthed:', typeof setIsAuthed);
+
   const [selected, setSelected] = React.useState(0);     // currently previewed
   const [savedIndex, setSavedIndex] = React.useState(0); // currently saved (confirmed)
 
@@ -126,7 +129,11 @@ export default function Setting() {
         <Text style={{ color: '#fff', fontWeight: '700' }}>SOUND EFFECT</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity
+  <LogoutButton
+    useProxy={true}                 // dev: true, prod: false
+    onLoggedOut={() => setIsAuthed(false)}
+  />
+      {/* <TouchableOpacity
         style={{
           backgroundColor: '#111',
           borderRadius: 12,
@@ -139,7 +146,7 @@ export default function Setting() {
         }}
       >
         <Text style={{ color: '#fff', fontWeight: '700' }}>LOG OUT</Text>
-      </TouchableOpacity>
+      </TouchableOpacity> */}
     </ScrollView>
   );
 }
