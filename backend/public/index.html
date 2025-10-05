@@ -6,15 +6,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
   <style>
     html, body { margin: 0; padding: 0; background: #000; color: #fff; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
-    #ui { position: fixed; top: 0; left: 0; right: 0; padding: 8px 12px; background: rgba(0,0,0,.45); backdrop-filter: blur(4px); display: flex; gap: 8px; align-items: center; z-index: 10; }
-    #status { font-size: 14px; opacity: .9; }
-    #speakBtn, #startBtn { padding: 8px 12px; border-radius: 10px; border: 0; color: #fff; font-weight: 600; }
-    #startBtn { background: #1e90ff; }
-    #speakBtn { background: #e50914; }
+    #ui {
+      position: fixed;
+      top: calc(env(safe-area-inset-top, 0px) + 72px);
+      left: 0; right: 0;
+      padding: 12px 14px;
+      background: rgba(0,0,0,.45);
+      backdrop-filter: blur(6px);
+      display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px;
+      z-index: 10;
+      border-radius: 14px;
+      width: min(92vw, 680px);
+      margin: 0 auto;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+    }
+    #status { font-size: 13px; opacity: .85; flex-basis: 100%; text-align: center; margin-top: 4px; }
+    #speakBtn, #startBtn {
+      padding: 14px 18px;
+      border-radius: 14px; border: 0; color: #fff; font-weight: 700; font-size: 16px;
+      min-height: 44px; -webkit-tap-highlight-color: transparent;
+    }
+    #startBtn { background: #10B981; /* emerald */ }
+    #speakBtn { background: #EF4444; /* red-500 */ }
     #wrap { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
     video, canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-    #advice { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 10px 12px; font-size: 18px; background: rgba(0,0,0,.5); }
-    .badge { font-size: 12px; opacity: .85; margin-left: auto; }
+    #advice { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 14px 16px; font-size: 20px; background: rgba(0,0,0,.5); }
+    .badge { display: none; }
   </style>
 
   <!-- TFJS + COCO-SSD (on-device object detection) -->
@@ -55,7 +72,8 @@
     // Classes we care about for navigation
     const TARGET_CLASSES = new Set([
       "person","bicycle","car","motorcycle","bus","truck","bench","chair","sofa",
-      "potted plant","tv","sink","refrigerator","backpack","umbrella","handbag","tie","suitcase"
+      "potted plant","tv","sink","refrigerator","backpack","umbrella","handbag","tie","suitcase",
+      "wall", "laptop", "door", "keyboard", "window"
     ]);
 
     // ====== ELEMENTS ======
@@ -231,7 +249,7 @@
       try { speechSynthesis.cancel(); } catch {}
     }
 
-    async function playElevenLabs(text, {timeoutMs = ELEVEN_TIMEOUT_MS, useCacheFirst = true, playIfFetched = true} = {}) {
+  async function playElevenLabs(text, {timeoutMs = ELEVEN_TIMEOUT_MS, useCacheFirst = true, playIfFetched = true} = {}) {
       // Cached clip?
       if (useCacheFirst && audioCache.has(text)) {
         const url = audioCache.get(text);
@@ -289,27 +307,25 @@
       await unlockAudioOnce();
       setAdvice(text); // update banner immediately
 
-      // If the instruction changed, speak immediately with device voice for zero latency.
-      if (changed) {
-        stopAllSpeech();
-        playDeviceVoice(text);
-        // In the background, prefetch ElevenLabs so repeats use the nicer voice.
-        if (USE_ELEVENLABS) playElevenLabs(text, { timeoutMs: ELEVEN_TIMEOUT_MS, playIfFetched: false }).catch(()=>{});
-        return;
-      }
-
-      // For repeats: try cached ElevenLabs first; if not cached and slow, fall back instantly.
-      if (USE_ELEVENLABS) {
-        // Try cache; if cache miss, try fast fetch; if both fail, use device voice.
-        const okCache = await playElevenLabs(text, { timeoutMs: 0, useCacheFirst: true });
-        if (okCache) return;
-
-        const okFast = await playElevenLabs(text, { timeoutMs: ELEVEN_TIMEOUT_MS, useCacheFirst: false });
-        if (okFast) return;
-      }
-      // Fallback
+      // Always prefer ElevenLabs; only use device voice if it fails or times out
       stopAllSpeech();
-      playDeviceVoice(text);
+      let played = false;
+
+      if (USE_ELEVENLABS) {
+        // 1) Try cache first (instant)
+        played = await playElevenLabs(text, { timeoutMs: 0, useCacheFirst: true });
+        if (!played) {
+          // 2) Try network with timeout
+          played = await playElevenLabs(text, { timeoutMs: ELEVEN_TIMEOUT_MS, useCacheFirst: false });
+        }
+      }
+
+      if (!played) {
+        // 3) Fallback to device TTS only if ElevenLabs failed/timeouts
+        playDeviceVoice(text);
+        // Optionally, prefetch ElevenLabs silently to warm cache for next time
+        if (USE_ELEVENLABS) playElevenLabs(text, { timeoutMs: ELEVEN_TIMEOUT_MS, playIfFetched: false }).catch(()=>{});
+      }
     }
 
     async function prefetchCommonTTS() {
