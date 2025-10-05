@@ -1,26 +1,33 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "description": "Backend server for Spidey-Sense AI accessibility app (YOLO + ElevenLabs + Auth0 + Express)",
   "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "nodemon server.js",
+    "serve": "node server.js"
+  },
+  "keywords": [
+    "express",
+    "yolo",
+    "accessibility",
+    "ai",
+    "spidey-sense",
+    "elevenlabs"
+  ],
+  "author": "Mohtashim Syed",
+  "license": "ISC",
   "dependencies": {
-    "axios": "^1.12.2",
+    "axios": "^1.6.8",
+    "body-parser": "^1.20.2",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
+    "dotenv": "^16.4.5",
     "express": "^5.1.0",
-    "morgan": "^1.10.1",
-    "multer": "^2.0.2"
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
   }
 }
-

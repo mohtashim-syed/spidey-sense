@@ -1,35 +1,20 @@
-// routes/detect.js
 import express from "express";
-import { getContextFromGemini } from "../controllers/geminiController.js";
+import { runYOLO } from "../services/yoloService.js";
+import { analyzeSpatial } from "../services/spatialService.js";
+import { generateMessage } from "../services/messageService.js";
 
 const router = express.Router();
 
-/**
- * POST /api/detect
- * Body:
- * {
- *   objects: string[],
- *   layout?: { left: string[], center: string[], right: string[] },
- *   mode?: "Explore" | "Focus" | "Calm" | string,
- *   hint?: string  // optional scene hint, e.g., "path clear ahead" or "obstacle ahead"
- * }
- */
 router.post("/", async (req, res) => {
   try {
-    const {
-      objects = [],
-      layout = null,
-      mode = "Explore",
-      hint = null
-    } = req.body || {};
-
-    const message = await getContextFromGemini(objects, layout, { mode, hint });
-    res.json({ message });
-  } catch (e) {
-    console.error("❌ /api/detect:", e?.response?.data || e.message);
-    const fallback =
-      (req.body?.objects?.length ? `Detected: ${req.body.objects.join(", ")}` : "Clear path ahead.");
-    res.json({ message: fallback });
+    const { frame, mode } = req.body;
+    const detections = await runYOLO(frame); // full objects { label, x, width, confidence }
+    const spatial = analyzeSpatial(detections);
+    const message = generateMessage(spatial, mode || "focus");
+    res.json({ spatial, message });
+  } catch (err) {
+    console.error("Detection error:", err);
+    res.status(500).json({ error: "Failed to detect objects" });
   }
 });
 

@@ -1,0 +1,32 @@
+[
+  {
+    "label": "bus",
+    "x": 0.498,
+    "width": 0.992,
+    "confidence": 0.96
+  },
+  {
+    "label": "person",
+    "x": 0.184,
+    "width": 0.244,
+    "confidence": 0.93
+  },
+  {
+    "label": "person",
+    "x": 0.913,
+    "width": 0.174,
+    "confidence": 0.92
+  },
+  {
+    "label": "person",
+    "x": 0.351,
+    "width": 0.15,
+    "confidence": 0.9
+  },
+  {
+    "label": "person",
+    "x": 0.049,
+    "width": 0.096,
+    "confidence": 0.75
+  }
+]
