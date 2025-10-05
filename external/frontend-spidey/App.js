@@ -7,8 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
 import { HomeScreen } from './assets/components/HomeScreen';
 import { SpideyScreen } from './assets/components/SpideyScreen';
-import { CameraScreen } from './assets/components/CameraScreen';
 import Setting from './assets/components/Setting';
+import WebExplore from './assets/components/WebExplore';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -93,8 +93,8 @@ export default function App() {
         {/* Splash / Welcome */}
         <Stack.Screen name="Home" component={HomeScreen} />
         
-        <Stack.Screen name="Spidey" component={SpideyScreen} />
-        <Stack.Screen name="CameraScreen" component={CameraScreen} />
+  <Stack.Screen name="Spidey" component={SpideyScreen} />
+  <Stack.Screen name="WebExplore" component={WebExplore} />
 
         {/* Optional page after splash */}
         <Stack.Screen name="Select" component={SelectScreen} />
