@@ -1,17 +1,28 @@
 import * as React from 'react';
 import { View, Text, TouchableOpacity, Alert, ImageBackground } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, ImageBackground, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Camera } from 'expo-camera';
+import { Asset } from 'expo-asset';
 import { ShadowTitle } from './ShadowTitle';
 import { styles } from '../styles';
 
-export function SpideyScreen({ navigation }) {
+export function SpideyScreen({  navigation  }) {
+  const [bgLoaded, setBgLoaded] = React.useState(false);
+  const bgImage = require('../../Background-pic/anthony2.png');
+
+  React.useEffect(() => {
+    async function loadBackground() {
+      await Asset.loadAsync([bgImage]);
+      setBgLoaded(true);
+    }
+    loadBackground();
+  }, []);
   const bgImage = require('../../assets/anthony2.png');
 
   const requestPermissions = async () => {
     try {
       const { status: camStatus } = await Camera.requestCameraPermissionsAsync();
-
       if (camStatus === 'granted') {
         Alert.alert('All Set!', 'You can now use your Spidey-Sense camera!');
         navigation.navigate('CameraScreen');
@@ -23,7 +34,7 @@ export function SpideyScreen({ navigation }) {
     }
   };
 
-  function button(text, onPress) {
+  if (!bgLoaded) {
     return (
       <View
         style={{
