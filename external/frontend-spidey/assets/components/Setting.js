@@ -1,4 +1,3 @@
-// assets/components/Setting.js
 import React from 'react';
 import { View, Text, Image, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,17 +10,12 @@ const AVATARS = [
 ];
 
 export default function Setting() {
-  const [selected, setSelected] = React.useState(0);     // currently previewed
-  const [savedIndex, setSavedIndex] = React.useState(0); // currently saved (confirmed)
+  const [selected, setSelected] = React.useState(0);
+  const [savedIndex, setSavedIndex] = React.useState(0);
 
   const goLeft = () => setSelected(prev => (prev === 0 ? AVATARS.length - 1 : prev - 1));
   const goRight = () => setSelected(prev => (prev === AVATARS.length - 1 ? 0 : prev + 1));
-
-  const confirmAvatar = () => {
-    setSavedIndex(selected);
-    Alert.alert('Avatar Updated', 'Your profile picture has been saved.');
-  };
-
+  const confirmAvatar = () => { setSavedIndex(selected); Alert.alert('Avatar Updated', 'Your profile picture has been saved.'); };
   const isSaved = selected === savedIndex;
 
   return (
@@ -29,26 +23,31 @@ export default function Setting() {
       contentContainerStyle={{
         padding: 20,
         paddingTop: 100,
-        backgroundColor: '#000',
+        backgroundColor: '#fff',
         flexGrow: 1,
         alignItems: 'center',
       }}
     >
-      {/* Title */}
-      <Text style={{ color: '#fff', fontSize: 24, fontWeight: '600', marginBottom: 30, fontFamilty: 'Baloo', textShadowColor: "#A20021",
-      textShadowRadius: 10,
-      textShadowOffset: { width: 0, height: 6 }, borderColor: '#000'}}>
+      <Text
+        style={{
+          color: '#000',
+          fontSize: 24,
+          fontWeight: '600',
+          marginBottom: 30,
+          fontFamily: 'Baloo',
+          textShadowColor: '#A20021',
+          textShadowRadius: 10,
+          textShadowOffset: { width: 0, height: 6 },
+        }}
+      >
         SETTING MODE
       </Text>
 
-      {/* Round PFP with arrows */}
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-        {/* Left arrow */}
         <TouchableOpacity onPress={goLeft} style={{ padding: 10 }}>
-          <Ionicons name="arrow-back-circle" size={36} color="#fff" />
+          <Ionicons name="arrow-back-circle" size={36} color="#000" />
         </TouchableOpacity>
 
-        {/* Profile image */}
         <View style={{ marginHorizontal: 10 }}>
           <Image
             source={AVATARS[selected]}
@@ -57,88 +56,84 @@ export default function Setting() {
               height: 120,
               borderRadius: 999,
               borderWidth: 3,
-              borderColor: '#fff',
+              borderColor: '#000',
             }}
           />
         </View>
 
-        {/* Right arrow */}
         <TouchableOpacity onPress={goRight} style={{ padding: 10 }}>
-          <Ionicons name="arrow-forward-circle" size={36} color="#fff" />
+          <Ionicons name="arrow-forward-circle" size={36} color="#000" />
         </TouchableOpacity>
       </View>
 
-      {/* Status text */}
-      <Text style={{ color: '#ccc', marginBottom: 12 }}>
+      <Text style={{ color: '#444', marginBottom: 12 }}>
         Avatar {selected + 1} of {AVATARS.length} {isSaved ? '(current)' : '(preview)'}
       </Text>
 
-      {/* Confirm button */}
       <TouchableOpacity
         disabled={isSaved}
         onPress={confirmAvatar}
         style={{
           opacity: isSaved ? 0.5 : 1,
-          backgroundColor: '#111',
+          backgroundColor: '#f2f2f2',
           borderRadius: 12,
           paddingVertical: 12,
           paddingHorizontal: 18,
           borderWidth: 1,
-          borderColor: '#22c55e',
+          borderColor: '#000',
           alignItems: 'center',
           marginBottom: 28,
         }}
       >
-        <Text style={{ color: '#22c55e', fontWeight: '700' , fontFamily: 'Baloo'}}>
+        <Text style={{ color: '#000', fontWeight: '700', fontFamily: 'Baloo' }}>
           {isSaved ? 'CONFIRMED' : 'CONFIRM'}
         </Text>
       </TouchableOpacity>
 
-      {/* Simple buttons */}
       <TouchableOpacity
         style={{
-          backgroundColor: '#111',
+          backgroundColor: '#f2f2f2',
           borderRadius: 12,
           paddingVertical: 14,
           alignItems: 'center',
-          borderWidth: 1,
-          borderColor: '#222',
+          borderWidth: 2,
+          borderColor: '#000',
           width: '80%',
           marginBottom: 58,
           marginTop: 33,
         }}
       >
-        <Text style={{ color: '#fff', fontWeight: '700' }}>PROFILE INFO</Text>
+        <Text style={{ color: '#000', fontWeight: '700' }}>PROFILE INFO</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={{
-          backgroundColor: '#111',
-          borderRadius: 12,
-          paddingVertical: 14,
-          alignItems: 'center',
-          borderWidth: 1,
-          borderColor: '#222',
-          width: '80%',
-          marginBottom: 50,
-        }}
-      >
-        <Text style={{ color: '#fff', fontWeight: '700' }}>SOUND EFFECT</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={{
-          backgroundColor: '#111',
+          backgroundColor: '#f2f2f2',
           borderRadius: 12,
           paddingVertical: 14,
           alignItems: 'center',
           borderWidth: 2,
-          borderColor: '#fff',
+          borderColor: '#000',
+          width: '80%',
+          marginBottom: 50,
+        }}
+      >
+        <Text style={{ color: '#000', fontWeight: '700' }}>SOUND EFFECT</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={{
+          backgroundColor: '#f2f2f2',
+          borderRadius: 12,
+          paddingVertical: 14,
+          alignItems: 'center',
+          borderWidth: 2,
+          borderColor: '#000',
           width: '80%',
           marginTop: 10,
         }}
       >
-        <Text style={{ color: '#fff', fontWeight: '700' }}>LOG OUT</Text>
+        <Text style={{ color: '#000', fontWeight: '700' }}>LOG OUT</Text>
       </TouchableOpacity>
     </ScrollView>
   );
