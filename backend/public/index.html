@@ -38,6 +38,23 @@
     }
     #advice { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 14px 16px; font-size: 20px; background: rgba(0,0,0,.5); }
     .badge { display: none; }
+
+    /* Minimal telemetry log (ms only) slightly above bottom banner */
+    #telemLog {
+      position: fixed;
+      right: 10px;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 56px);
+      background: rgba(0,0,0,0.35);
+      color: #fff;
+      border-radius: 8px;
+      padding: 6px 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+      line-height: 1.25;
+      z-index: 11;
+      white-space: pre;
+      opacity: 0.9;
+    }
   </style>
 
   <!-- TFJS + COCO-SSD (on-device object detection) -->
@@ -62,6 +79,9 @@
   </div>
 
   <div id="advice">Ready.</div>
+
+  <!-- Minimal Telemetry Log (ms) -->
+  <div id="telemLog"></div>
 
   <script>
     // ====== CONFIG ======
@@ -94,6 +114,16 @@
   const startBtn = document.getElementById("startBtn");
   const speakBtn = document.getElementById("speakBtn");
   const rotateBtn = document.getElementById("rotateBtn");
+  // Minimal telemetry log
+  const telemLogEl = document.getElementById('telemLog');
+  const telemLines = [];
+  function addTelemMs(ms) {
+    try {
+      telemLines.push(String(ms));
+      if (telemLines.length > 6) telemLines.shift();
+      if (telemLogEl) telemLogEl.textContent = telemLines.join('\n');
+    } catch {}
+  }
 
     // ====== STATE ======
     let model = null;
@@ -228,6 +258,7 @@
       } catch {
         deviceId = 'dev-' + Math.random().toString(36).slice(2);
       }
+      // no HUD device label in minimal mode
     }
 
     // Capture device motion/orientation
@@ -293,6 +324,8 @@
           gyroDegPerS, motionEnergy,
           flipped180: rotated180,
         };
+        // update minimal on-screen log with ms timestamp
+        addTelemMs(body.t);
         fetch((BACKEND_BASE || '') + '/api/fall/telemetry', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)
@@ -539,7 +572,7 @@
         setStatus("Running");
         running = true;
         mainLoop();
-        if (FALL_TELEMETRY) { attachMotionListeners(); ensureDeviceId(); telemetryLoop(); }
+  if (FALL_TELEMETRY) { attachMotionListeners(); ensureDeviceId(); telemetryLoop(); }
       } catch (e) {
         setStatus("Init error: " + e.message);
         startBtn.disabled = false;
