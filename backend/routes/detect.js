@@ -1,35 +1,32 @@
 // routes/detect.js
-import express from "express";
-import { getContextFromGemini } from "../controllers/geminiController.js";
+import { Router } from "express";
+import { generateText } from "../services/gemini.js";
 
-const router = express.Router();
+const router = Router();
 
-/**
- * POST /api/detect
- * Body:
- * {
- *   objects: string[],
- *   layout?: { left: string[], center: string[], right: string[] },
- *   mode?: "Explore" | "Focus" | "Calm" | string,
- *   hint?: string  // optional scene hint, e.g., "path clear ahead" or "obstacle ahead"
- * }
- */
-router.post("/", async (req, res) => {
+// Simple text QA with Gemini
+router.post("/", async (req, res, next) => {
   try {
-    const {
-      objects = [],
-      layout = null,
-      mode = "Explore",
-      hint = null
-    } = req.body || {};
+    const { prompt } = req.body;
+    if (!prompt || typeof prompt !== "string") {
+      return res.status(400).json({ error: true, message: "Missing 'prompt' string" });
+    }
+    const text = await generateText(prompt);
+    res.json({ ok: true, text });
+  } catch (err) {
+    console.error("Gemini error:", err?.message);
+    next(err);
+  }
+});
 
-    const message = await getContextFromGemini(objects, layout, { mode, hint });
-    res.json({ message });
-  } catch (e) {
-    console.error("❌ /api/detect:", e?.response?.data || e.message);
-    const fallback =
-      (req.body?.objects?.length ? `Detected: ${req.body.objects.join(", ")}` : "Clear path ahead.");
-    res.json({ message: fallback });
+// Optional: quick connectivity probe hitting a tiny prompt
+router.get("/ping", async (req, res, next) => {
+  try {
+    const text = await generateText("Say 'pong'.");
+    res.json({ ok: true, text });
+  } catch (err) {
+    console.error("Gemini ping error:", err?.message);
+    next(err);
   }
 });
 

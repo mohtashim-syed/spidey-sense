@@ -1,20 +1,24 @@
-import express from "express";
-import { streamSpeechFromElevenLabs } from "../controllers/elevenLabsController.js";
-const router = express.Router();
+// routes/speak.js
+import { Router } from "express";
+import { synthesizeSpeech } from "../services/eleven.js";
 
-// POST /api/speak { text, voiceId? }
-router.post("/", async (req, res) => {
+const router = Router();
+
+router.post("/", async (req, res, next) => {
   try {
-    const { text, voiceId } = req.body || {};
-    if (!text || !text.trim()) return res.status(400).json({ error: "Missing text" });
+    const { text, voiceId } = req.body;
+    if (!text || typeof text !== "string") {
+      return res.status(400).json({ error: true, message: "Missing 'text' string" });
+    }
 
-    const response = await streamSpeechFromElevenLabs(text.trim(), voiceId);
-    res.setHeader("Content-Type", "audio/mpeg");
-    // stream the MP3 back to the client
-    response.data.pipe(res);
+    const { buffer, contentType } = await synthesizeSpeech(text, voiceId);
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Length", buffer.length);
+    res.status(200).send(buffer);
   } catch (err) {
-    console.error("TTS error:", err?.response?.data || err.message);
-    res.status(500).json({ error: "Text-to-Speech failed" });
+    console.error("TTS error:", err?.message);
+    next(err);
   }
 });
 
