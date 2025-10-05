@@ -41,11 +41,16 @@
 
   <script>
     // ====== CONFIG ======
-    const BACKEND_BASE = "";            // same origin; set e.g. "https://<your-tunnel>" if serving elsewhere
-    const USE_ELEVENLABS = true;        // try server TTS first, then fall back to device voice
-    const MIN_SCORE = 0.5;              // detector confidence threshold
-    const DETECT_EVERY_MS = 200;        // ~5 Hz
-    const SPEAK_EVERY_MS  = 1800;       // rate-limit spoken guidance
+    const BACKEND_BASE = "";                 // same origin; set e.g. "https://<your-tunnel>" if serving elsewhere
+    const USE_ELEVENLABS = true;             // try ElevenLabs; we still fall back instantly when needed
+    const ELEVEN_TIMEOUT_MS = 1200;          // give ElevenLabs ~1.2s; otherwise speak device voice
+    const MIN_SCORE = 0.5;                   // detector confidence threshold
+    const DETECT_EVERY_MS = 200;             // ~5 Hz detection
+    const MIN_SPEAK_GAP_MS = 1200;           // don't speak more often than this
+    const REPEAT_SAME_MS  = 5000;            // repeat same instruction every 5s if unchanged
+    const PREFETCH_PHRASES = [
+      "Veer left.", "Veer right.", "Straight ahead.", "Stop. Re-route."
+    ];
 
     // Classes we care about for navigation
     const TARGET_CLASSES = new Set([
@@ -66,6 +71,9 @@
     let model = null;
     let running = false;
     let lastSpokenAt = 0;
+    let lastAction = null;
+    let lastText = "";
+    let currentAudio = null;
 
     // ====== UTIL ======
     function setStatus(s){ statusEl.textContent = s; }
@@ -116,11 +124,7 @@
     async function initCamera() {
       assertSecureContext();
 
-      const constraints = {
-        audio: false,
-        video: { facingMode: { ideal: "environment" } }
-      };
-
+      const constraints = { audio: false, video: { facingMode: { ideal: "environment" } } };
       let stream;
       try {
         stream = await getMedia(constraints);
@@ -164,19 +168,35 @@
     }
 
     function decideGuidance(objects) {
-      const score = { left: 1.0, center: 1.0, right: 1.0 };
-      for (const o of objects) {
-        const s = o.sector;
-        if (o.nearness === "near") score[s] -= 0.9;
-        else if (o.nearness === "mid") score[s] -= 0.5;
-        else score[s] -= 0.2;
+      if (!objects || objects.length === 0) {
+        return { text: "Straight ahead.", action: "forward" };
       }
-      const ranking = Object.entries(score).sort((a,b)=>b[1]-a[1]);
-      const [best, val] = ranking[0];
-      if (val < 0.3) return { text: "Stop. Re-route.", action: "stop" };
-      if (best === "left")  return { text: "Veer left.", action: "left" };
-      if (best === "right") return { text: "Veer right.", action: "right" };
-      return { text: "Straight ahead.", action: "forward" };
+
+      const bySector = { left: [], center: [], right: [] };
+      for (const o of objects) bySector[o.sector].push(o);
+
+      const isNM = (o) => (o.nearness === "near" || o.nearness === "mid");
+      const Lnm = bySector.left.some(isNM);
+      const Cnm = bySector.center.some(isNM);
+      const Rnm = bySector.right.some(isNM);
+
+      if (!Lnm && !Cnm && !Rnm) return { text: "Straight ahead.", action: "forward" };
+      if (Lnm && !Rnm && !Cnm) return { text: "Veer right.", action: "right" };
+      if (Rnm && !Lnm && !Cnm) return { text: "Veer left.", action: "left" };
+
+      if (Cnm && !Lnm && !Rnm) {
+        const leftCount  = bySector.left.length;
+        const rightCount = bySector.right.length;
+        return (leftCount <= rightCount) ? { text: "Veer left.", action: "left" }
+                                         : { text: "Veer right.", action: "right" };
+      }
+
+      if (Lnm && !Rnm) return { text: "Veer right.", action: "right" };
+      if (Rnm && !Lnm) return { text: "Veer left.", action: "left" };
+
+      if (!Cnm && Lnm && Rnm) return { text: "Straight ahead.", action: "forward" };
+
+      return { text: "Stop. Re-route.", action: "stop" };
     }
 
     // ====== DRAWING ======
@@ -204,54 +224,98 @@
       }
     }
 
-    // ====== SPEECH ======
-    async function speak(text) {
-      await unlockAudioOnce();
+    // ====== SPEECH PIPELINE (fast + reliable) ======
+    let audioCache = new Map(); // text -> objectURL
+    function stopAllSpeech() {
+      try { if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; currentAudio = null; } } catch {}
+      try { speechSynthesis.cancel(); } catch {}
+    }
 
-      if (USE_ELEVENLABS) {
-        try {
-          const r = await fetch((BACKEND_BASE || "") + "/api/speak", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text })
-          });
-          if (r.ok) {
-            const blob = await r.blob();
-            const url  = URL.createObjectURL(blob);
-            const audio = new Audio(url);
-            audio.preload = "auto";
-            audio.crossOrigin = "anonymous";
-            try {
-              await audio.play();
-              setAdvice(text + " 〔ElevenLabs〕");
-              return;
-            } catch (playErr) {
-              console.warn("Audio.play() blocked:", playErr);
-              // fall through to device voice
-            }
-          } else {
-            console.warn("ElevenLabs HTTP", r.status, await r.text().catch(()=>"(body read error)"));
-          }
-        } catch (netErr) {
-          console.warn("ElevenLabs network error:", netErr);
-        }
+    async function playElevenLabs(text, {timeoutMs = ELEVEN_TIMEOUT_MS, useCacheFirst = true, playIfFetched = true} = {}) {
+      // Cached clip?
+      if (useCacheFirst && audioCache.has(text)) {
+        const url = audioCache.get(text);
+        const audio = new Audio(url);
+        audio.preload = "auto";
+        audio.crossOrigin = "anonymous";
+        currentAudio = audio;
+        await audio.play();
+        return true;
       }
 
-      // Device voice fallback
+      // Fetch with timeout
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort("tts-timeout"), timeoutMs);
+
       try {
-        if (typeof speechSynthesis !== "undefined") {
-          if (speechSynthesis.paused) speechSynthesis.resume();
-          const u = new SpeechSynthesisUtterance(text);
-          u.rate = 1.05; u.pitch = 1.0;
-          speechSynthesis.cancel();
-          speechSynthesis.speak(u);
-          setAdvice(text + " 〔Device voice〕");
-          return;
+        const r = await fetch((BACKEND_BASE || "") + "/api/speak", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+          signal: ctrl.signal
+        });
+        clearTimeout(t);
+        if (!r.ok) return false;
+
+        const blob = await r.blob();
+        const url  = URL.createObjectURL(blob);
+        audioCache.set(text, url);
+
+        if (playIfFetched) {
+          const audio = new Audio(url);
+          audio.preload = "auto";
+          audio.crossOrigin = "anonymous";
+          currentAudio = audio;
+          await audio.play();
         }
-        setAdvice(text + " 〔No speech engine available〕");
+        return true;
       } catch (e) {
-        console.warn("Speech fallback failed:", e);
-        setAdvice("Speech failed: " + (e?.message || e));
+        clearTimeout(t);
+        return false;
+      }
+    }
+
+    function playDeviceVoice(text) {
+      if (typeof speechSynthesis === "undefined") return false;
+      if (speechSynthesis.paused) speechSynthesis.resume();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.05; u.pitch = 1.0;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+      return true;
+    }
+
+    async function speak(text, {changed=false} = {}) {
+      await unlockAudioOnce();
+      setAdvice(text); // update banner immediately
+
+      // If the instruction changed, speak immediately with device voice for zero latency.
+      if (changed) {
+        stopAllSpeech();
+        playDeviceVoice(text);
+        // In the background, prefetch ElevenLabs so repeats use the nicer voice.
+        if (USE_ELEVENLABS) playElevenLabs(text, { timeoutMs: ELEVEN_TIMEOUT_MS, playIfFetched: false }).catch(()=>{});
+        return;
+      }
+
+      // For repeats: try cached ElevenLabs first; if not cached and slow, fall back instantly.
+      if (USE_ELEVENLABS) {
+        // Try cache; if cache miss, try fast fetch; if both fail, use device voice.
+        const okCache = await playElevenLabs(text, { timeoutMs: 0, useCacheFirst: true });
+        if (okCache) return;
+
+        const okFast = await playElevenLabs(text, { timeoutMs: ELEVEN_TIMEOUT_MS, useCacheFirst: false });
+        if (okFast) return;
+      }
+      // Fallback
+      stopAllSpeech();
+      playDeviceVoice(text);
+    }
+
+    async function prefetchCommonTTS() {
+      if (!USE_ELEVENLABS) return;
+      for (const phrase of PREFETCH_PHRASES) {
+        playElevenLabs(phrase, { timeoutMs: 2000, useCacheFirst: true, playIfFetched: false }).catch(()=>{});
       }
     }
 
@@ -285,9 +349,16 @@
         setAdvice(guide.text);
 
         const now = performance.now();
-        if (now - lastSpokenAt > SPEAK_EVERY_MS) {
+        const changed = guide.action !== lastAction;
+
+        const enoughGap = (now - lastSpokenAt) >= MIN_SPEAK_GAP_MS;
+        const needRepeat = (!changed && (now - lastSpokenAt) >= REPEAT_SAME_MS && guide.text === lastText);
+
+        if ((changed && enoughGap) || needRepeat) {
           lastSpokenAt = now;
-          speak(guide.text);
+          lastAction = guide.action;
+          lastText = guide.text;
+          speak(guide.text, { changed });
         }
       } catch (e) {
         setStatus("Error: " + e.message);
@@ -305,6 +376,7 @@
         await initCamera();
         setStatus("Downloading detector…");
         model = await cocoSsd.load({ base: "lite_mobilenet_v2" }); // faster on phones
+        await prefetchCommonTTS(); // warm up TTS cache (non-blocking)
         setStatus("Running");
         running = true;
         mainLoop();
@@ -314,8 +386,12 @@
       }
     });
 
-    speakBtn.addEventListener("click", () => {
-      speak("Spidey-Sense voice check.");
+    speakBtn.addEventListener("click", async () => {
+      // Manual test: this uses the changed=true path so you hear it instantly
+      lastAction = null; // force "changed"
+      lastText = "";
+      lastSpokenAt = 0;
+      await speak("Spidey-Sense voice check.", { changed: true });
     });
   </script>
 </body>
