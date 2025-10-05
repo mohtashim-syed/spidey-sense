@@ -16,6 +16,7 @@ const __dirname = path.dirname(__filename);
 import detectRoutes from "./routes/detect.js";
 import speakRoutes from "./routes/speak.js";
 import profileRoutes from "./routes/profile.js";
+import fallRoutes from "./routes/fall.js";
 
 // OpenAI grounded controller (must be the version that uses input_text/input_image)
 import { groundedDescribe } from "./controllers/openaiGroundedController.js";
@@ -52,6 +53,9 @@ app.get("/", (_req, res) => {
           <li><code>POST /api/detect</code> — your object detection route</li>
           <li><code>POST /api/speak</code> — ElevenLabs TTS route</li>
           <li><code>GET  /api/profile</code> — sample profile route</li>
+          <li><code>POST /api/fall/telemetry</code> — streaming device telemetry</li>
+          <li><code>GET  /api/fall/state/:deviceId</code> — get detector state</li>
+          <li><code>POST /api/fall/reset</code> — reset detector state</li>
         </ul>
       </body>
     </html>
@@ -78,6 +82,7 @@ app.post("/api/openai/grounded-describe", upload.single("image"), (req, res, nex
 app.use("/api/detect", detectRoutes);
 app.use("/api/speak", speakRoutes);
 app.use("/api/profile", profileRoutes);
+app.use("/api/fall", fallRoutes);
 
 // 404 for unknown routes
 app.use((_req, res) => {
