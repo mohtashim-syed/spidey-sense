@@ -14,17 +14,17 @@ export function SpideyScreen({navigation}) {
         style={{
           borderRadius: 50,
           borderWidth: 10,
-          borderColor: "#34D399",
+          borderColor: "#FFFFFF",
           marginTop: 24,
           paddingVertical: 12,
           paddingHorizontal: 30,
-          backgroundColor: 'rgba(52, 211, 153, 0.12)'
+          backgroundColor: 'rgba(255, 255, 255, 0.12)'
         }}>
         <Text style={{
           fontFamily: 'Baloo',
           fontSize: 42,
           textAlign:'center',
-          color: "#34D399",
+          color: "#FFFFFF",
           paddingHorizontal: 12
         }}>
           {text}

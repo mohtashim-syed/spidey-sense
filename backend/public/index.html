@@ -21,15 +21,21 @@
       box-shadow: 0 6px 24px rgba(0,0,0,0.35);
     }
     #status { font-size: 13px; opacity: .85; flex-basis: 100%; text-align: center; margin-top: 4px; }
-    #speakBtn, #startBtn {
+    #speakBtn, #startBtn, #rotateBtn {
       padding: 14px 18px;
       border-radius: 14px; border: 0; color: #fff; font-weight: 700; font-size: 16px;
       min-height: 44px; -webkit-tap-highlight-color: transparent;
     }
     #startBtn { background: #10B981; /* emerald */ }
     #speakBtn { background: #EF4444; /* red-500 */ }
+    #rotateBtn { background: #374151; /* gray-700 */ }
     #wrap { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
     video, canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    /* Flip the camera view 180° when user prefers upside-down mounting */
+    .rot180 video, .rot180 canvas {
+      transform: rotate(180deg);
+      transform-origin: center center;
+    }
     #advice { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 14px 16px; font-size: 20px; background: rgba(0,0,0,.5); }
     .badge { display: none; }
   </style>
@@ -45,6 +51,7 @@
   <div id="ui">
     <button id="startBtn">Activate Spidey-Sense</button>
     <button id="speakBtn">Test Voice</button>
+    <button id="rotateBtn" title="Flip view 180° for upside-down mounting">Flip 180°</button>
     <span id="status">Idle</span>
     <span class="badge">L/C/R + Nearness</span>
   </div>
@@ -82,8 +89,9 @@
     const ctx      = canvas.getContext("2d");
     const statusEl = document.getElementById("status");
     const adviceEl = document.getElementById("advice");
-    const startBtn = document.getElementById("startBtn");
-    const speakBtn = document.getElementById("speakBtn");
+  const startBtn = document.getElementById("startBtn");
+  const speakBtn = document.getElementById("speakBtn");
+  const rotateBtn = document.getElementById("rotateBtn");
 
     // ====== STATE ======
     let model = null;
@@ -96,6 +104,14 @@
     // ====== UTIL ======
     function setStatus(s){ statusEl.textContent = s; }
     function setAdvice(s){ adviceEl.textContent = s; }
+
+    // Rotation preference
+    let rotated180 = false;
+    function applyRotation() {
+      document.body.classList.toggle('rot180', rotated180);
+      if (rotateBtn) rotateBtn.textContent = rotated180 ? 'Unflip' : 'Flip 180°';
+      try { localStorage.setItem('rotate180', rotated180 ? '1' : '0'); } catch {}
+    }
 
     // iOS requires HTTPS (or localhost) for camera; enforce early with a clear message
     function assertSecureContext() {
@@ -183,6 +199,14 @@
       if (u < 0.33) return "left";
       if (u > 0.66) return "right";
       return "center";
+    }
+
+    // When the view is flipped 180°, user-perceived left/right are inverted.
+    function adjustSectorForRotation(sector) {
+      if (!rotated180) return sector;
+      if (sector === 'left') return 'right';
+      if (sector === 'right') return 'left';
+      return sector; // center unchanged
     }
 
     function decideGuidance(objects) {
@@ -353,7 +377,7 @@
             score: p.score,
             bbox,
             nearness: nearness(bbox, w, h),
-            sector:   sectorFor(bbox, w)
+            sector:   adjustSectorForRotation(sectorFor(bbox, w))
           };
           objects.push(obj);
         }
@@ -409,6 +433,11 @@
       lastSpokenAt = 0;
       await speak("Spidey-Sense voice check.", { changed: true });
     });
+
+    // Initialize rotation state from storage
+    try { rotated180 = localStorage.getItem('rotate180') === '1'; } catch {}
+    applyRotation();
+    rotateBtn.addEventListener('click', () => { rotated180 = !rotated180; applyRotation(); });
   </script>
 </body>
 </html>
