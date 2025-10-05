@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Spidey-Sense Field Test</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <style>
+    html, body { margin: 0; padding: 0; background: #000; color: #fff; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    #ui { position: fixed; top: 0; left: 0; right: 0; padding: 8px 12px; background: rgba(0,0,0,.45); backdrop-filter: blur(4px); display: flex; gap: 8px; align-items: center; z-index: 10; }
+    #status { font-size: 14px; opacity: .9; }
+    #speakBtn, #startBtn { padding: 8px 12px; border-radius: 10px; border: 0; color: #fff; font-weight: 600; }
+    #startBtn { background: #1e90ff; }
+    #speakBtn { background: #e50914; }
+    #wrap { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+    video, canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    #advice { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 10px 12px; font-size: 18px; background: rgba(0,0,0,.5); }
+    .badge { font-size: 12px; opacity: .85; margin-left: auto; }
+  </style>
+
+  <!-- TFJS + COCO-SSD (on-device object detection) -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+
+  <!-- WebRTC adapter for Safari/iOS quirks -->
+  <script src="https://cdn.jsdelivr.net/npm/webrtc-adapter@9.0.1/out/adapter_no_edge_no_global.js"></script>
+</head>
+<body>
+  <div id="ui">
+    <button id="startBtn">Activate Spidey-Sense</button>
+    <button id="speakBtn">Test Voice</button>
+    <span id="status">Idle</span>
+    <span class="badge">L/C/R + Nearness</span>
+  </div>
+
+  <div id="wrap">
+    <video id="video" playsinline muted></video>
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <div id="advice">Ready.</div>
+
+  <script>
+    // ====== CONFIG ======
+    const BACKEND_BASE = "";                 // same origin; set e.g. "https://<your-tunnel>" if serving elsewhere
+    const USE_ELEVENLABS = true;             // try ElevenLabs; we still fall back instantly when needed
+    const ELEVEN_TIMEOUT_MS = 1200;          // give ElevenLabs ~1.2s; otherwise speak device voice
+    const MIN_SCORE = 0.5;                   // detector confidence threshold
+    const DETECT_EVERY_MS = 200;             // ~5 Hz detection
+    const MIN_SPEAK_GAP_MS = 1200;           // don't speak more often than this
+    const REPEAT_SAME_MS  = 5000;            // repeat same instruction every 5s if unchanged
+    const PREFETCH_PHRASES = [
+      "Veer left.", "Veer right.", "Straight ahead.", "Stop. Re-route."
+    ];
+
+    // Classes we care about for navigation
+    const TARGET_CLASSES = new Set([
+      "person","bicycle","car","motorcycle","bus","truck","bench","chair","sofa",
+      "potted plant","tv","sink","refrigerator","backpack","umbrella","handbag","tie","suitcase"
+    ]);
+
+    // ====== ELEMENTS ======
+    const video    = document.getElementById("video");
+    const canvas   = document.getElementById("canvas");
+    const ctx      = canvas.getContext("2d");
+    const statusEl = document.getElementById("status");
+    const adviceEl = document.getElementById("advice");
+    const startBtn = document.getElementById("startBtn");
+    const speakBtn = document.getElementById("speakBtn");
+
+    // ====== STATE ======
+    let model = null;
+    let running = false;
+    let lastSpokenAt = 0;
+    let lastAction = null;
+    let lastText = "";
+    let currentAudio = null;
+
+    // ====== UTIL ======
+    function setStatus(s){ statusEl.textContent = s; }
+    function setAdvice(s){ adviceEl.textContent = s; }
+
+    // iOS requires HTTPS (or localhost) for camera; enforce early with a clear message
+    function assertSecureContext() {
+      const isLocalhost = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+      const isSecure = location.protocol === "https:";
+      if (!isSecure && !isLocalhost) {
+        throw new Error("Camera requires HTTPS on iOS. Open this page via https (e.g., an ngrok/localtunnel/Cloudflare tunnel).");
+      }
+    }
+
+    // Cross-browser getUserMedia polyfill for older WebKit
+    function getMedia(constraints) {
+      if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === "function") {
+        return navigator.mediaDevices.getUserMedia(constraints);
+      }
+      const legacy = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+      if (legacy) {
+        return new Promise((resolve, reject) => legacy.call(navigator, constraints, resolve, reject));
+      }
+      return Promise.reject(new Error("getUserMedia is not supported in this browser/context."));
+    }
+
+    // Audio unlock for iOS Safari
+    let audioUnlocked = false;
+    let audioCtx;
+    async function unlockAudioOnce() {
+      if (audioUnlocked) return;
+      try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === "suspended") await audioCtx.resume();
+        const buf = audioCtx.createBuffer(1, 128, audioCtx.sampleRate);
+        const src = audioCtx.createBufferSource();
+        src.buffer = buf;
+        src.connect(audioCtx.destination);
+        src.start(0);
+        audioUnlocked = true;
+        console.log("Audio unlocked.");
+      } catch (e) {
+        console.warn("Audio unlock failed:", e);
+      }
+    }
+
+    // ====== CAMERA ======
+    async function initCamera() {
+      assertSecureContext();
+
+      const constraints = { audio: false, video: { facingMode: { ideal: "environment" } } };
+      let stream;
+      try {
+        stream = await getMedia(constraints);
+      } catch (e) {
+        if (e && (e.name === "NotAllowedError" || e.name === "SecurityError")) {
+          throw new Error("Camera permission was blocked. In iOS Settings → Safari, allow Camera access and reload over HTTPS.");
+        }
+        if (e && (e.name === "NotFoundError" || e.name === "OverconstrainedError")) {
+          throw new Error("No suitable camera found or constraints unsupported. Try removing constraints or switching cameras.");
+        }
+        throw e;
+      }
+
+      video.srcObject = stream;
+      await video.play();
+
+      const resize = () => {
+        const w = video.videoWidth || window.innerWidth;
+        const h = video.videoHeight || window.innerHeight;
+        canvas.width = w;
+        canvas.height = h;
+      };
+      resize();
+      window.addEventListener("resize", resize);
+    }
+
+    // ====== NAVIGATION HEURISTICS ======
+    function nearness(box, viewW, viewH) {
+      const area = (box.width * box.height) / (viewW * viewH + 1e-6);
+      if (area > 0.12) return "near";
+      if (area > 0.05) return "mid";
+      return "far";
+    }
+
+    function sectorFor(box, viewW) {
+      const cx = box.x + box.width / 2;
+      const u = cx / viewW;
+      if (u < 0.33) return "left";
+      if (u > 0.66) return "right";
+      return "center";
+    }
+
+    function decideGuidance(objects) {
+      if (!objects || objects.length === 0) {
+        return { text: "Straight ahead.", action: "forward" };
+      }
+
+      const bySector = { left: [], center: [], right: [] };
+      for (const o of objects) bySector[o.sector].push(o);
+
+      const isNM = (o) => (o.nearness === "near" || o.nearness === "mid");
+      const Lnm = bySector.left.some(isNM);
+      const Cnm = bySector.center.some(isNM);
+      const Rnm = bySector.right.some(isNM);
+
+      if (!Lnm && !Cnm && !Rnm) return { text: "Straight ahead.", action: "forward" };
+      if (Lnm && !Rnm && !Cnm) return { text: "Veer right.", action: "right" };
+      if (Rnm && !Lnm && !Cnm) return { text: "Veer left.", action: "left" };
+
+      if (Cnm && !Lnm && !Rnm) {
+        const leftCount  = bySector.left.length;
+        const rightCount = bySector.right.length;
+        return (leftCount <= rightCount) ? { text: "Veer left.", action: "left" }
+                                         : { text: "Veer right.", action: "right" };
+      }
+
+      if (Lnm && !Rnm) return { text: "Veer right.", action: "right" };
+      if (Rnm && !Lnm) return { text: "Veer left.", action: "left" };
+
+      if (!Cnm && Lnm && Rnm) return { text: "Straight ahead.", action: "forward" };
+
+      return { text: "Stop. Re-route.", action: "stop" };
+    }
+
+    // ====== DRAWING ======
+    function draw(objects) {
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0,0,w,h);
+      ctx.lineWidth = 3;
+      ctx.font = "16px system-ui";
+      ctx.textBaseline = "top";
+
+      for (const o of objects) {
+        const color = o.sector === "left" ? "#1e90ff" : o.sector === "center" ? "#ffd000" : "#e50914";
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.9;
+
+        ctx.strokeRect(o.bbox.x, o.bbox.y, o.bbox.width, o.bbox.height);
+        const label = `${o.class} ${Math.round(o.score*100)}% • ${o.sector} • ${o.nearness}`;
+        const tw = ctx.measureText(label).width + 8;
+        const th = 20;
+        const ty = Math.max(0, o.bbox.y - 22);
+        ctx.fillRect(o.bbox.x, ty, tw, th);
+        ctx.fillStyle = "#000";
+        ctx.fillText(label, o.bbox.x + 4, ty + 2);
+      }
+    }
+
+    // ====== SPEECH PIPELINE (fast + reliable) ======
+    let audioCache = new Map(); // text -> objectURL
+    function stopAllSpeech() {
+      try { if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; currentAudio = null; } } catch {}
+      try { speechSynthesis.cancel(); } catch {}
+    }
+
+    async function playElevenLabs(text, {timeoutMs = ELEVEN_TIMEOUT_MS, useCacheFirst = true, playIfFetched = true} = {}) {
+      // Cached clip?
+      if (useCacheFirst && audioCache.has(text)) {
+        const url = audioCache.get(text);
+        const audio = new Audio(url);
+        audio.preload = "auto";
+        audio.crossOrigin = "anonymous";
+        currentAudio = audio;
+        await audio.play();
+        return true;
+      }
+
+      // Fetch with timeout
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort("tts-timeout"), timeoutMs);
+
+      try {
+        const r = await fetch((BACKEND_BASE || "") + "/api/speak", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+          signal: ctrl.signal
+        });
+        clearTimeout(t);
+        if (!r.ok) return false;
+
+        const blob = await r.blob();
+        const url  = URL.createObjectURL(blob);
+        audioCache.set(text, url);
+
+        if (playIfFetched) {
+          const audio = new Audio(url);
+          audio.preload = "auto";
+          audio.crossOrigin = "anonymous";
+          currentAudio = audio;
+          await audio.play();
+        }
+        return true;
+      } catch (e) {
+        clearTimeout(t);
+        return false;
+      }
+    }
+
+    function playDeviceVoice(text) {
+      if (typeof speechSynthesis === "undefined") return false;
+      if (speechSynthesis.paused) speechSynthesis.resume();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.05; u.pitch = 1.0;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+      return true;
+    }
+
+    async function speak(text, {changed=false} = {}) {
+      await unlockAudioOnce();
+      setAdvice(text); // update banner immediately
+
+      // If the instruction changed, speak immediately with device voice for zero latency.
+      if (changed) {
+        stopAllSpeech();
+        playDeviceVoice(text);
+        // In the background, prefetch ElevenLabs so repeats use the nicer voice.
+        if (USE_ELEVENLABS) playElevenLabs(text, { timeoutMs: ELEVEN_TIMEOUT_MS, playIfFetched: false }).catch(()=>{});
+        return;
+      }
+
+      // For repeats: try cached ElevenLabs first; if not cached and slow, fall back instantly.
+      if (USE_ELEVENLABS) {
+        // Try cache; if cache miss, try fast fetch; if both fail, use device voice.
+        const okCache = await playElevenLabs(text, { timeoutMs: 0, useCacheFirst: true });
+        if (okCache) return;
+
+        const okFast = await playElevenLabs(text, { timeoutMs: ELEVEN_TIMEOUT_MS, useCacheFirst: false });
+        if (okFast) return;
+      }
+      // Fallback
+      stopAllSpeech();
+      playDeviceVoice(text);
+    }
+
+    async function prefetchCommonTTS() {
+      if (!USE_ELEVENLABS) return;
+      for (const phrase of PREFETCH_PHRASES) {
+        playElevenLabs(phrase, { timeoutMs: 2000, useCacheFirst: true, playIfFetched: false }).catch(()=>{});
+      }
+    }
+
+    // ====== MAIN LOOP ======
+    async function mainLoop() {
+      if (!running) return;
+      try {
+        const preds = await model.detect(video);
+        const w = canvas.width, h = canvas.height;
+
+        const objects = [];
+        for (const p of preds) {
+          if (p.score < MIN_SCORE) continue;
+          if (!TARGET_CLASSES.has(p.class)) continue;
+          const [x,y,bw,bh] = p.bbox;
+          const bbox = { x, y, width: bw, height: bh };
+          const obj = {
+            class: p.class,
+            score: p.score,
+            bbox,
+            nearness: nearness(bbox, w, h),
+            sector:   sectorFor(bbox, w)
+          };
+          objects.push(obj);
+        }
+
+        draw(objects);
+        setStatus(`${objects.length} objects`);
+
+        const guide = decideGuidance(objects);
+        setAdvice(guide.text);
+
+        const now = performance.now();
+        const changed = guide.action !== lastAction;
+
+        const enoughGap = (now - lastSpokenAt) >= MIN_SPEAK_GAP_MS;
+        const needRepeat = (!changed && (now - lastSpokenAt) >= REPEAT_SAME_MS && guide.text === lastText);
+
+        if ((changed && enoughGap) || needRepeat) {
+          lastSpokenAt = now;
+          lastAction = guide.action;
+          lastText = guide.text;
+          speak(guide.text, { changed });
+        }
+      } catch (e) {
+        setStatus("Error: " + e.message);
+      } finally {
+        setTimeout(mainLoop, DETECT_EVERY_MS);
+      }
+    }
+
+    // ====== UI HANDLERS ======
+    startBtn.addEventListener("click", async () => {
+      try {
+        await unlockAudioOnce();
+        startBtn.disabled = true;
+        setStatus("Loading model…");
+        await initCamera();
+        setStatus("Downloading detector…");
+        model = await cocoSsd.load({ base: "lite_mobilenet_v2" }); // faster on phones
+        await prefetchCommonTTS(); // warm up TTS cache (non-blocking)
+        setStatus("Running");
+        running = true;
+        mainLoop();
+      } catch (e) {
+        setStatus("Init error: " + e.message);
+        startBtn.disabled = false;
+      }
+    });
+
+    speakBtn.addEventListener("click", async () => {
+      // Manual test: this uses the changed=true path so you hear it instantly
+      lastAction = null; // force "changed"
+      lastText = "";
+      lastSpokenAt = 0;
+      await speak("Spidey-Sense voice check.", { changed: true });
+    });
+  </script>
+</body>
+</html>

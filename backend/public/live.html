@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Spidey-Sense Live</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 16px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    video, canvas, img { width: 320px; max-width: 100%; border-radius: 12px; background:#111; }
+    button { padding: 10px 14px; border-radius:10px; border:0; background:#111827; color:#fff; font-weight:600; }
+    button[disabled]{opacity:.6}
+    .log { white-space: pre-wrap; background:#f8fafc; padding:12px; border-radius:10px; }
+    .pill { padding:4px 8px; border-radius:999px; background:#e5e7eb; font-size:12px; }
+  </style>
+</head>
+<body>
+  <h1>Spidey-Sense (OpenAI grounded, browser capture)</h1>
+  <div class="row">
+    <span class="pill" id="status">idle</span>
+    <button id="startCam">Start camera</button>
+    <button id="askBtn" disabled>Ask “Where am I?”</button>
+    <button id="voiceBtn" disabled>🎤 Voice</button>
+  </div>
+
+  <div class="row" style="margin-top:12px">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas" style="display:none"></canvas>
+  </div>
+
+  <h3>Result</h3>
+  <div class="log" id="out">(none yet)</div>
+
+  <script>
+    const BASE = ""; // same origin as backend; leave blank when served by your Express app
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const out = document.getElementById("out");
+    const statusEl = document.getElementById("status");
+    const startCam = document.getElementById("startCam");
+    const askBtn = document.getElementById("askBtn");
+    const voiceBtn = document.getElementById("voiceBtn");
+
+    let stream = null;
+
+    function setStatus(s){ statusEl.textContent = s; }
+
+    async function startCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+        video.srcObject = stream;
+        video.onloadedmetadata = () => video.play();
+        askBtn.disabled = false;
+        voiceBtn.disabled = !("webkitSpeechRecognition" in window || "SpeechRecognition" in window);
+        setStatus("camera ready");
+      } catch (e) {
+        setStatus("camera failed");
+        alert("Camera permission is required.");
+      }
+    }
+
+    function captureFrameBlob() {
+      const w = video.videoWidth || 640, h = video.videoHeight || 480;
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, w, h);
+      return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8));
+    }
+
+    async function sendFrame(promptText = "Where am I and where should I go?") {
+      try {
+        setStatus("capturing");
+        const blob = await captureFrameBlob();
+        setStatus("uploading");
+        const form = new FormData();
+        form.append("image", blob, "frame.jpg");
+        form.append("detections", JSON.stringify([])); // plug in your COCO-SSD results here if you have them
+        form.append("prompt", promptText);
+
+        const r = await fetch(`${BASE}/api/openai/grounded-describe`, { method: "POST", body: form });
+        if (!r.ok) {
+          const t = await r.text();
+          throw new Error(`HTTP ${r.status}: ${t}`);
+        }
+        const json = await r.json();
+        out.textContent = JSON.stringify(json, null, 2);
+        setStatus("done");
+      } catch (e) {
+        setStatus("error");
+        out.textContent = "Error: " + (e.message || e);
+      }
+    }
+
+    function startVoice() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) { alert("Web Speech API not supported in this browser."); return; }
+      const rec = new SR();
+      rec.lang = "en-US";
+      rec.interimResults = false;
+      rec.maxAlternatives = 1;
+      rec.onresult = (e) => {
+        const text = e.results[0][0].transcript;
+        setStatus(`heard: “${text}”`);
+        // You can add intent routing here. For now, just send the frame with the heard text as prompt.
+        sendFrame(text);
+      };
+      rec.onerror = (e) => { setStatus("voice error: " + e.error); };
+      rec.onend = () => { voiceBtn.disabled = false; setStatus("voice idle"); };
+      voiceBtn.disabled = true;
+      setStatus("listening…");
+      rec.start();
+    }
+
+    startCam.addEventListener("click", startCamera);
+    askBtn.addEventListener("click", () => sendFrame("Where am I and where should I go?"));
+    voiceBtn.addEventListener("click", startVoice);
+  </script>
+</body>
+</html>

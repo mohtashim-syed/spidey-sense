@@ -1,18 +1,32 @@
-// This JS will detect objects.
-import express from "express";
-import { getContextFromGemini } from "../controllers/geminiController.js";
+// routes/detect.js
+import { Router } from "express";
+import { generateText } from "../services/gemini.js";
 
-const router = express.Router();
+const router = Router();
 
-// POST /api/detect
-router.post("/", async (req, res) => {
+// Simple text QA with Gemini
+router.post("/", async (req, res, next) => {
   try {
-    const { objects } = req.body; // e.g. ["person", "door", "chair"]
-    const context = await getContextFromGemini(objects);
-    res.json({ message: context });
+    const { prompt } = req.body;
+    if (!prompt || typeof prompt !== "string") {
+      return res.status(400).json({ error: true, message: "Missing 'prompt' string" });
+    }
+    const text = await generateText(prompt);
+    res.json({ ok: true, text });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Gemini detection failed" });
+    console.error("Gemini error:", err?.message);
+    next(err);
+  }
+});
+
+// Optional: quick connectivity probe hitting a tiny prompt
+router.get("/ping", async (req, res, next) => {
+  try {
+    const text = await generateText("Say 'pong'.");
+    res.json({ ok: true, text });
+  } catch (err) {
+    console.error("Gemini ping error:", err?.message);
+    next(err);
   }
 });
 

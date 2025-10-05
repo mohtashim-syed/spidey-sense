@@ -1,10 +1,9 @@
-// Handles user profiles TTS
-import express from "express";
-import { getUserProfile } from "../controllers/profileController.js";
+// routes/profile.js
+import { Router } from "express";
+const router = Router();
 
-const router = express.Router();
-
-// GET /api/profile
-router.get("/", getUserProfile);
+router.get("/", (req, res) => {
+  res.json({ ok: true, profile: { app: "Spidey-Sense" } });
+});
 
 export default router;
