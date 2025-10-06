@@ -55,7 +55,7 @@ So we built **Spidey Sense** — a friendly AI companion that *sees, thinks, and
 
 ### 🔥 Frontend
 
-* HTML, CSS, JavaScript for a **voice-first UI**
+* React, CSS, JavaScript for a **voice-first UI**
 * Web Speech API for push-to-talk and voice capture
 * Mock interface simulating object detection + Gemini dialogue
 
